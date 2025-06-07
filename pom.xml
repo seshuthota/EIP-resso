@@ -15,6 +15,7 @@
     <modules>
         <module>config-server</module>
         <module>user-service</module>
+        <module>product-catalog-service</module>
     </modules>
 
     <properties>

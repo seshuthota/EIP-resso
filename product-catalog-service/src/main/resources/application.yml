@@ -1,0 +1,32 @@
+spring:
+  application:
+    name: product-catalog-service
+  
+
+
+server:
+  port: 8082
+
+# Management endpoints for monitoring Camel routes
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,camel,camelroutes
+  endpoint:
+    health:
+      show-details: always
+
+# Camel configuration
+camel:
+  springboot:
+    name: product-catalog-camel-context
+    main-run-controller: true
+    jmx-enabled: true
+
+# Logging
+logging:
+  level:
+    com.eipresso.product: DEBUG
+    org.apache.camel: INFO
+    org.springframework.cloud: INFO 

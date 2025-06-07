@@ -1,0 +1,182 @@
+# Product Catalog Service Configuration
+# EIP-resso Coffee Shop - Apache Camel EIP Patterns Service
+
+spring:
+  application:
+    name: product-catalog-service
+  profiles:
+    active: development
+  
+  # Database Configuration
+  datasource:
+    url: jdbc:postgresql://localhost:5432/product_catalog
+    username: product_user
+    password: product_pass
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      maximum-pool-size: 10
+      minimum-idle: 5
+  
+  # JPA Configuration
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+        use_sql_comments: true
+
+# Server Configuration
+server:
+  port: 8082
+  servlet:
+    context-path: /
+
+# Management & Monitoring
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,camel,jolokia
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+# Apache Camel Configuration
+camel:
+  springboot:
+    name: product-catalog-camel-context
+    main-run-controller: true
+    jmx-enabled: true
+  servlet:
+    mapping:
+      context-path: /camel/*
+  management:
+    enabled: true
+    level: All
+  metrics:
+    enabled: true
+
+# Redis Configuration for Caching
+redis:
+  host: localhost
+  port: 6379
+  timeout: 2000
+  database: 1
+
+# Hazelcast Configuration for Clustering
+hazelcast:
+  config:
+    cluster-name: product-catalog-cluster
+    network:
+      port: 5701
+      port-auto-increment: true
+    management-center:
+      enabled: true
+      url: http://localhost:8080/mancenter
+
+# EIP Pattern Configuration
+eip:
+  patterns:
+    cache:
+      enabled: true
+      default-ttl: 3600
+      featured-product-ttl: 7200
+      popular-product-ttl: 10800
+    
+    multicast:
+      enabled: true
+      parallel-processing: true
+      stop-on-exception: false
+    
+    polling-consumer:
+      enabled: true
+      supplier-poll-interval: 900000  # 15 minutes
+      inventory-poll-interval: 300000  # 5 minutes
+    
+    recipient-list:
+      enabled: true
+      timeout: 5000
+      parallel-processing: true
+
+# Service Discovery (Consul) - extending spring config
+  cloud:
+    consul:
+      host: localhost
+      port: 8500
+      discovery:
+        enabled: true
+        service-name: ${spring.application.name}
+        health-check-path: /actuator/health
+        health-check-interval: 15s
+        instance-id: ${spring.application.name}:${server.port}
+
+# Logging Configuration
+logging:
+  level:
+    com.eipresso.product: DEBUG
+    org.apache.camel: INFO
+    org.springframework.cloud: DEBUG
+    org.springframework.web: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level [%logger{36}] - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level [%logger{36}] - %msg%n"
+
+---
+# Development Profile
+spring:
+  config:
+    activate:
+      on-profile: development
+  
+  datasource:
+    url: jdbc:postgresql://localhost:5432/product_catalog_dev
+    username: dev_user
+    password: dev_pass
+
+logging:
+  level:
+    root: INFO
+    com.eipresso.product: DEBUG
+    org.apache.camel: DEBUG
+
+---
+# Production Profile  
+spring:
+  config:
+    activate:
+      on-profile: production
+  
+  datasource:
+    url: jdbc:postgresql://prod-db:5432/product_catalog_prod
+    username: ${DB_USERNAME:prod_user}
+    password: ${DB_PASSWORD:prod_pass}
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 10
+
+redis:
+  host: ${REDIS_HOST:redis-cluster}
+  port: ${REDIS_PORT:6379}
+
+hazelcast:
+  config:
+    network:
+      port: ${HAZELCAST_PORT:5701}
+    management-center:
+      url: ${HAZELCAST_MGMT_URL:http://hazelcast-mgmt:8080/mancenter}
+
+logging:
+  level:
+    root: WARN
+    com.eipresso.product: INFO
+    org.apache.camel: INFO 

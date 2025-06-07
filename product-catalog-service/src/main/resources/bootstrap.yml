@@ -1,0 +1,43 @@
+spring:
+  application:
+    name: product-catalog-service
+  profiles:
+    active: development
+  cloud:
+    config:
+      uri: http://localhost:8888
+      username: eip-resso-admin
+      password: admin123
+      fail-fast: false
+      retry:
+        initial-interval: 1000
+        max-attempts: 6
+        max-interval: 2000
+        multiplier: 1.1
+    consul:
+      host: localhost
+      port: 8500
+      discovery:
+        service-name: ${spring.application.name}
+        health-check-interval: 10s
+        tags:
+          - camel
+          - product-catalog
+          - eip-patterns
+          - clustering
+        metadata:
+          version: 1.0.0
+          patterns: "Cache,Multicast,RecipientList,PollingConsumer"
+          clustering: "Active-Active"
+
+server:
+  port: 8082
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,camel,hazelcast,metrics
+  endpoint:
+    health:
+      show-details: always 
