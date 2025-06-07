@@ -1,0 +1,272 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: eip-resso
+  labels:
+    name: eip-resso
+    purpose: microservices-demo
+---
+# ConfigMap for application configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: config-server-config
+  namespace: eip-resso
+  labels:
+    app: config-server
+    component: configuration
+data:
+  # Standard production configuration values
+  ENVIRONMENT: "production"
+  CLUSTER_NAME: "eip-resso-prod"
+  
+  # Git repository configuration (non-sensitive)
+  CONFIG_GIT_URI: "https://github.com/your-org/eip-resso-config.git"
+  CONFIG_GIT_BRANCH: "main"
+  CONFIG_SEARCH_PATHS: "'{application}'"
+  
+  # Logging configuration
+  LOG_LEVEL_EIPRESSO: "INFO"
+  LOG_LEVEL_CAMEL: "WARN"
+  LOG_FILE: "/app/logs/config-server.log"
+  LOG_MAX_SIZE: "100MB"
+  LOG_MAX_HISTORY: "7"
+  
+  # Monitoring configuration
+  METRICS_PROMETHEUS_ENABLED: "true"
+  METRICS_CLOUDWATCH_ENABLED: "false"
+  CAMEL_JMX_ENABLED: "false"  # Disabled in Kubernetes
+  MANAGEMENT_PORT: "8889"
+  
+  # Kubernetes specific
+  KUBERNETES_ENABLED: "true"
+  KUBERNETES_NAMESPACE: "eip-resso"
+---
+# Secret for sensitive configuration
+apiVersion: v1
+kind: Secret
+metadata:
+  name: config-server-secrets
+  namespace: eip-resso
+  labels:
+    app: config-server
+    component: secrets
+type: Opaque
+data:
+  # Base64 encoded values (replace with actual values)
+  CONFIG_SERVER_PASSWORD: Y29uZmlnLWFkbWluLXBhc3N3b3Jk  # config-admin-password
+  CONFIG_GIT_USERNAME: Z2l0aHViLXVzZXI=  # github-user
+  CONFIG_GIT_TOKEN: Z2l0aHViLXRva2Vu  # github-token
+---
+# Service Account for the config server
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: config-server
+  namespace: eip-resso
+  labels:
+    app: config-server
+---
+# Deployment for Config Server
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: config-server
+  namespace: eip-resso
+  labels:
+    app: config-server
+    component: configuration
+    version: v1
+spec:
+  replicas: 2  # High availability
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: config-server
+  template:
+    metadata:
+      labels:
+        app: config-server
+        component: configuration
+        version: v1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8889"
+        prometheus.io/path: "/actuator/prometheus"
+    spec:
+      serviceAccountName: config-server
+      
+      # Security context
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+      
+      containers:
+      - name: config-server
+        image: eipresso/config-server:1.0.0
+        imagePullPolicy: IfNotPresent
+        
+        ports:
+        - name: http
+          containerPort: 8888
+          protocol: TCP
+        - name: management
+          containerPort: 8889
+          protocol: TCP
+        
+        # Environment variables from ConfigMap
+        envFrom:
+        - configMapRef:
+            name: config-server-config
+        
+        # Sensitive environment variables from Secret
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: "standard-production"
+        - name: CONFIG_SERVER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: config-server-secrets
+              key: CONFIG_SERVER_PASSWORD
+        - name: CONFIG_GIT_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: config-server-secrets
+              key: CONFIG_GIT_USERNAME
+        - name: CONFIG_GIT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: config-server-secrets
+              key: CONFIG_GIT_TOKEN
+        - name: HOSTNAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        
+        # Resource limits and requests
+        resources:
+          limits:
+            cpu: 500m
+            memory: 512Mi
+          requests:
+            cpu: 250m
+            memory: 256Mi
+        
+        # Liveness probe
+        livenessProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: management
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        # Readiness probe
+        readinessProbe:
+          httpGet:
+            path: /actuator/health/readiness
+            port: management
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        # Startup probe
+        startupProbe:
+          httpGet:
+            path: /actuator/health
+            port: management
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 10
+        
+        # Volume mounts
+        volumeMounts:
+        - name: logs
+          mountPath: /app/logs
+        - name: tmp
+          mountPath: /tmp
+      
+      volumes:
+      - name: logs
+        emptyDir: {}
+      - name: tmp
+        emptyDir: {}
+      
+      # Pod scheduling
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - config-server
+              topologyKey: kubernetes.io/hostname
+---
+# Service for Config Server
+apiVersion: v1
+kind: Service
+metadata:
+  name: config-server
+  namespace: eip-resso
+  labels:
+    app: config-server
+    component: configuration
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8889"
+    prometheus.io/path: "/actuator/prometheus"
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 8888
+    targetPort: http
+    protocol: TCP
+  - name: management
+    port: 8889
+    targetPort: management
+    protocol: TCP
+  selector:
+    app: config-server
+---
+# Horizontal Pod Autoscaler
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: config-server-hpa
+  namespace: eip-resso
+  labels:
+    app: config-server
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: config-server
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80 

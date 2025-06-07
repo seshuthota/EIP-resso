@@ -1,0 +1,62 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    database-platform: org.hibernate.dialect.H2Dialect
+  h2:
+    console:
+      enabled: false
+
+# Disable Config Server for tests
+  cloud:
+    config:
+      enabled: false
+      import-check:
+        enabled: false
+    consul:
+      enabled: false
+      discovery:
+        enabled: false
+    service-registry:
+      auto-registration:
+        enabled: false
+  application:
+    name: user-service-test
+
+# Disable Camel main controller for tests
+camel:
+  springboot:
+    main-run-controller: false
+    routes-include-pattern: ""
+    routes-exclude-pattern: "**"
+
+# Disable Hazelcast for tests
+hazelcast:
+  enabled: false
+
+# JWT Configuration for tests
+eipresso:
+  jwt:
+    secret: test-secret-key-that-is-at-least-256-bits-long-for-jwt-token-signing
+    access-token-expiration: 900  # 15 minutes
+    refresh-token-expiration: 604800  # 7 days
+    issuer: eip-resso-test
+
+# Logging
+logging:
+  level:
+    com.eipresso: DEBUG
+    org.springframework.web: DEBUG
+    org.springframework.security: DEBUG
+    org.apache.camel: DEBUG
+
+# Test-specific configuration
+test:
+  data:
+    cleanup: true 

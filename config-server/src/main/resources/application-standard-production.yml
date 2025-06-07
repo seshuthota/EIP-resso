@@ -1,0 +1,158 @@
+# EIP-resso Configuration Server - Standard Production Setup
+# Following industry best practices for production configuration management
+
+server:
+  port: 8888
+
+spring:
+  application:
+    name: eip-resso-config-server
+  
+  # Standard Production Config Server Setup
+  cloud:
+    config:
+      server:
+        git:
+          # External Git repository (injected via environment variables)
+          uri: ${CONFIG_GIT_URI:https://github.com/your-org/eip-resso-config.git}
+          default-label: ${CONFIG_GIT_BRANCH:main}
+          search-paths: ${CONFIG_SEARCH_PATHS:'{application}'}
+          username: ${CONFIG_GIT_USERNAME:}
+          password: ${CONFIG_GIT_TOKEN:}
+          
+          # Standard production settings
+          clone-on-start: true
+          force-pull: true
+          refresh-rate: 0  # No automatic refresh - configs are immutable
+          
+          # Timeout settings for reliability
+          timeout: 10
+          
+        # Disable native profile (we use Git only)
+        native:
+          search-locations: []
+          
+        # Health check configuration
+        health:
+          enabled: true
+          
+  # Security - externalized credentials
+  security:
+    user:
+      name: ${CONFIG_SERVER_USER:config-admin}
+      password: ${CONFIG_SERVER_PASSWORD}  # MUST be provided via environment
+      roles: ADMIN
+
+# Enable standard production monitoring mode
+eip-resso:
+  config:
+    mode: standard-production  # This enables our standard production routes
+
+# Production Camel Configuration - Minimal and focused
+camel:
+  springboot:
+    name: eip-resso-config-server-prod
+    main-run-controller: true
+    jmx-enabled: ${CAMEL_JMX_ENABLED:true}
+    endpoint-runtime-statistics-enabled: true
+    use-mdc-logging: true
+  
+  # JMX for monitoring (optional in Kubernetes)
+  jmx:
+    enabled: ${CAMEL_JMX_ENABLED:true}
+    use-platform-mbean-server: true
+    
+  # Component configuration
+  component:
+    micrometer:
+      enabled: true
+
+# Production Management & Monitoring
+management:
+  server:
+    port: ${MANAGEMENT_PORT:8889}  # Separate management port for security
+    
+  endpoints:
+    web:
+      exposure:
+        include: 
+          - health
+          - info
+          - metrics
+          - prometheus
+          - refresh  # For manual config refresh
+      base-path: /actuator
+      
+  endpoint:
+    health:
+      show-details: when-authorized
+      show-components: when-authorized
+      probes:
+        enabled: true  # Kubernetes liveness/readiness probes
+    info:
+      enabled: true
+    metrics:
+      enabled: true
+    refresh:
+      enabled: true
+      
+  # Metrics export
+  metrics:
+    export:
+      prometheus:
+        enabled: ${METRICS_PROMETHEUS_ENABLED:true}
+      # Cloud provider specific metrics
+      cloudwatch:
+        enabled: ${METRICS_CLOUDWATCH_ENABLED:false}
+        namespace: ${CLOUDWATCH_NAMESPACE:EIPResso}
+      datadog:
+        enabled: ${METRICS_DATADOG_ENABLED:false}
+        api-key: ${DATADOG_API_KEY:}
+        
+    tags:
+      service: config-server
+      environment: ${ENVIRONMENT:production}
+      version: '@project.version@'
+      cluster: ${CLUSTER_NAME:default}
+
+# Production Logging - Structured JSON for log aggregation
+logging:
+  level:
+    com.eipresso: ${LOG_LEVEL_EIPRESSO:INFO}
+    org.apache.camel: ${LOG_LEVEL_CAMEL:WARN}
+    org.springframework.cloud.config: INFO
+    org.springframework.security: WARN
+    org.springframework.web: WARN
+    
+  pattern:
+    # JSON structured logging for production log aggregation (ELK, Splunk, etc.)
+    console: '{"timestamp":"%d{yyyy-MM-dd HH:mm:ss.SSS}","level":"%-5level","thread":"%thread","logger":"%logger{36}","correlation":"%X{camelCorrelationId:-}","message":"%msg"}%n'
+    
+  # File logging (if not using log aggregation)
+  file:
+    name: ${LOG_FILE:/app/logs/config-server.log}
+    max-size: ${LOG_MAX_SIZE:100MB}
+    max-history: ${LOG_MAX_HISTORY:7}
+
+# Production Application Info
+info:
+  app:
+    name: '@project.name@'
+    description: EIP-resso Configuration Server - Standard Production
+    version: '@project.version@'
+    environment: ${ENVIRONMENT:production}
+    cluster: ${CLUSTER_NAME:default}
+  build:
+    timestamp: '@maven.build.timestamp@'
+    artifact: '@project.artifactId@'
+    group: '@project.groupId@'
+  camel:
+    name: ${camel.springboot.name}
+    version: '@camel.version@'
+  git:
+    repository: ${spring.cloud.config.server.git.uri}
+    branch: ${spring.cloud.config.server.git.default-label}
+  kubernetes:
+    enabled: ${KUBERNETES_ENABLED:false}
+    namespace: ${KUBERNETES_NAMESPACE:default}
+    pod-name: ${HOSTNAME:unknown} 

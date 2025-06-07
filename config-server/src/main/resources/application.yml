@@ -1,0 +1,118 @@
+server:
+  port: 8888
+
+spring:
+  application:
+    name: eip-resso-config-server
+  
+  # Standard Production Config Server Setup
+  cloud:
+    config:
+      server:
+        git:
+          # External Git repository (injected via environment variables)
+          uri: ${CONFIG_GIT_URI:file://${user.home}/eip-resso-config-repo}
+          default-label: ${CONFIG_GIT_BRANCH:main}
+          search-paths: ${CONFIG_SEARCH_PATHS:'{application}'}
+          username: ${CONFIG_GIT_USERNAME:}
+          password: ${CONFIG_GIT_TOKEN:}
+          
+          # Standard production settings
+          clone-on-start: true
+          force-pull: true
+          refresh-rate: 0  # No automatic refresh - configs are immutable
+          
+          # Timeout settings for reliability
+          timeout: 10
+          
+        # Disable native profile (we use Git only)
+        native:
+          search-locations: []
+          
+        # Health check configuration
+        health:
+          enabled: true
+  
+  # Security - externalized credentials
+  security:
+    user:
+      name: ${CONFIG_SERVER_USER:eip-resso-admin}
+      password: ${CONFIG_SERVER_PASSWORD:admin123}  # Should be overridden in production
+      roles: ADMIN
+
+# Enable standard production monitoring mode
+eip-resso:
+  config:
+    mode: standard-production  # This enables our standard production routes
+
+# Apache Camel Configuration
+camel:
+  springboot:
+    name: eip-resso-config-server-camel
+    main-run-controller: true
+    jmx-enabled: true
+    endpoint-runtime-statistics-enabled: true
+    use-mdc-logging: true
+  
+  # JMX Management
+  jmx:
+    enabled: true
+    use-platform-mbean-server: true
+    
+  # Component Configuration
+  component:
+    micrometer:
+      enabled: true
+
+# Management & Monitoring
+management:
+  endpoints:
+    web:
+      exposure:
+        include: 
+          - health
+          - info
+          - metrics
+          - prometheus
+          - env
+          - configprops
+          - camel
+          - camelroutes
+    enabled-by-default: true
+  
+  endpoint:
+    health:
+      show-details: when-authorized
+      show-components: when-authorized
+    camel:
+      enabled: true
+      
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    tags:
+      service: config-server
+      version: '@project.version@'
+
+# Logging Configuration
+logging:
+  level:
+    com.eipresso: DEBUG
+    org.apache.camel: INFO
+    org.springframework.cloud.config: INFO
+    org.springframework.security: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level [%X{camelCorrelationId}] %logger{36} - %msg%n"
+
+# Application Info
+info:
+  app:
+    name: '@project.name@'
+    description: EIP-resso Configuration Management Service
+    version: '@project.version@'
+  build:
+    timestamp: '@maven.build.timestamp@'
+  camel:
+    name: ${camel.springboot.name}
+    version: '@camel.version@' 

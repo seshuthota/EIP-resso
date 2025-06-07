@@ -1,0 +1,146 @@
+version: '3.8'
+
+services:
+  # EIP-resso Configuration Server
+  config-server:
+    build: 
+      context: ./config-server
+      dockerfile: Dockerfile
+    image: eipresso/config-server:1.0.0
+    container_name: eip-resso-config-server
+    restart: unless-stopped
+    ports:
+      - "8888:8888"
+    environment:
+      # Spring Profile
+      SPRING_PROFILES_ACTIVE: production
+      
+      # External Git Repository Configuration
+      GIT_USERNAME: ${GIT_USERNAME}
+      GIT_TOKEN: ${GIT_TOKEN}
+      
+      # Security Configuration
+      CONFIG_ADMIN_USER: ${CONFIG_ADMIN_USER:-eip-resso-admin}
+      CONFIG_ADMIN_PASSWORD: ${CONFIG_ADMIN_PASSWORD}
+      
+      # Webhook Configuration
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET}
+      GIT_API_TOKEN: ${GIT_API_TOKEN}
+      
+      # JVM Configuration
+      JAVA_OPTS: "-Xmx512m -Xms256m -XX:+UseG1GC -Dspring.profiles.active=production"
+      
+      # Logging
+      LOGGING_LEVEL_COM_EIPRESSO: INFO
+      
+      # External Git Repository URL (override default)
+      SPRING_CLOUD_CONFIG_SERVER_GIT_URI: ${CONFIG_REPO_URL:-https://github.com/your-org/eip-resso-config.git}
+      
+    volumes:
+      # Log volume for persistent logging
+      - config-logs:/var/logs/config-server
+      
+      # Optional: Mount custom configuration if needed
+      # - ./config/production:/config:ro
+      
+    networks:
+      - eip-resso-network
+    
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8888/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.config-server.rule=Host(`config.eip-resso.local`)"
+      - "traefik.http.services.config-server.loadbalancer.server.port=8888"
+
+  # Message Queue for production Camel routes
+  activemq:
+    image: apache/activemq-artemis:2.30.0
+    container_name: eip-resso-activemq
+    restart: unless-stopped
+    ports:
+      - "61616:61616"  # OpenWire
+      - "5672:5672"    # AMQP
+      - "8161:8161"    # Web Console
+    environment:
+      ARTEMIS_USER: ${ARTEMIS_USER:-admin}
+      ARTEMIS_PASSWORD: ${ARTEMIS_PASSWORD:-admin123}
+    volumes:
+      - artemis-data:/var/lib/artemis-instance/data
+    networks:
+      - eip-resso-network
+
+  # Elasticsearch for audit trail (production monitoring)
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.10.0
+    container_name: eip-resso-elasticsearch
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    networks:
+      - eip-resso-network
+
+  # Prometheus for metrics collection
+  prometheus:
+    image: prom/prometheus:v2.45.0
+    container_name: eip-resso-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    networks:
+      - eip-resso-network
+
+  # Grafana for monitoring dashboards
+  grafana:
+    image: grafana/grafana:10.1.0
+    container_name: eip-resso-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin123}
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    networks:
+      - eip-resso-network
+
+volumes:
+  config-logs:
+    driver: local
+  artemis-data:
+    driver: local
+  elasticsearch-data:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+
+networks:
+  eip-resso-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16 

@@ -1,0 +1,135 @@
+# EIP-resso Configuration Server - Production Profile
+
+spring:
+  application:
+    name: eip-resso-config-server
+  
+  # Production Config Server Settings
+  cloud:
+    config:
+      server:
+        git:
+          # External Git repository (GitHub, GitLab, Bitbucket)
+          uri: https://github.com/your-org/eip-resso-config.git
+          default-label: main
+          search-paths: '{application}'
+          username: ${GIT_USERNAME:}
+          password: ${GIT_TOKEN:}
+          clone-on-start: true
+          force-pull: true
+          refresh-rate: 60  # seconds
+        
+        # Health indicator
+        health:
+          enabled: true
+  
+  # Production Security
+  security:
+    user:
+      name: ${CONFIG_ADMIN_USER:eip-resso-admin}
+      password: ${CONFIG_ADMIN_PASSWORD:}  # Must be provided via environment variable
+      roles: ADMIN
+
+# Enable production monitoring mode
+eip-resso:
+  config:
+    monitoring:
+      mode: production
+    git:
+      webhook:
+        secret: ${WEBHOOK_SECRET:}
+        enabled: true
+      api:
+        token: ${GIT_API_TOKEN:}
+        polling:
+          enabled: true
+          interval: 300000  # 5 minutes
+
+# Production Camel Configuration
+camel:
+  springboot:
+    name: eip-resso-config-server-camel-prod
+    main-run-controller: true
+    jmx-enabled: true
+    endpoint-runtime-statistics-enabled: true
+    use-mdc-logging: true
+  
+  # JMX Management for production monitoring
+  jmx:
+    enabled: true
+    use-platform-mbean-server: true
+    
+  # Component Configuration for production
+  component:
+    micrometer:
+      enabled: true
+    servlet:
+      enabled: true  # For webhook endpoints
+
+# Production Management & Monitoring
+management:
+  endpoints:
+    web:
+      exposure:
+        include: 
+          - health
+          - info
+          - metrics
+          - prometheus
+          - env
+          - configprops
+          - camel
+          - camelroutes
+          - refresh  # Important for production config refresh
+      base-path: /actuator
+  
+  endpoint:
+    health:
+      show-details: always
+      show-components: always
+    camel:
+      enabled: true
+    refresh:
+      enabled: true
+      
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+      cloudwatch:
+        enabled: ${AWS_CLOUDWATCH_ENABLED:false}
+    tags:
+      service: config-server
+      environment: production
+      version: '@project.version@'
+
+# Production Logging
+logging:
+  level:
+    com.eipresso: INFO
+    org.apache.camel: WARN
+    org.springframework.cloud.config: INFO
+    org.springframework.security: WARN
+    org.springframework.web: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level [%X{camelCorrelationId}] %logger{36} - %msg%n"
+  file:
+    name: /var/logs/config-server/application.log
+    max-size: 100MB
+    max-history: 30
+
+# Application Info for production
+info:
+  app:
+    name: '@project.name@'
+    description: EIP-resso Configuration Management Service - Production
+    version: '@project.version@'
+    environment: production
+  build:
+    timestamp: '@maven.build.timestamp@'
+  camel:
+    name: ${camel.springboot.name}
+    version: '@camel.version@'
+  git:
+    repository: ${spring.cloud.config.server.git.uri}
+    branch: ${spring.cloud.config.server.git.default-label} 

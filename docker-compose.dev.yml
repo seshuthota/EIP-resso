@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: eip-resso-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: eip_resso
+      POSTGRES_USER: eip_resso_user
+      POSTGRES_PASSWORD: eip_resso_pass
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - eip-resso-network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: eip-resso-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    networks:
+      - eip-resso-network
+
+  # RabbitMQ Message Queue
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: eip-resso-rabbitmq
+    restart: unless-stopped
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: eip_resso
+      RABBITMQ_DEFAULT_PASS: eip_resso_pass
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    networks:
+      - eip-resso-network
+
+volumes:
+  postgres-data:
+    driver: local
+  redis-data:
+    driver: local
+  rabbitmq-data:
+    driver: local
+
+networks:
+  eip-resso-network:
+    driver: bridge 
