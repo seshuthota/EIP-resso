@@ -17,6 +17,8 @@
         <module>user-service</module>
         <module>product-catalog-service</module>
         <module>order-management-service</module>
+        <module>notification-service</module>
+        <module>analytics-service</module>
     </modules>
 
     <properties>
