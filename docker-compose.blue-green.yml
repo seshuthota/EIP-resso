@@ -1,0 +1,59 @@
+# EIP-resso Blue-Green Deployment Configuration
+version: '3.8'
+
+services:
+  # Blue Environment (Current Production)
+  config-server-blue:
+    build:
+      context: ./config-server
+      dockerfile: Dockerfile.simple
+    container_name: eip-resso-config-blue
+    environment:
+      - SPRING_PROFILES_ACTIVE=production
+      - SERVER_PORT=8888
+      - DEPLOYMENT_VERSION=v1.0.0-blue
+      - DEPLOYMENT_COLOR=blue
+    ports:
+      - "8890:8888"
+    networks:
+      blue-green-network:
+        ipv4_address: 172.22.1.10
+
+  # Green Environment (New Version)
+  config-server-green:
+    build:
+      context: ./config-server
+      dockerfile: Dockerfile.simple
+    container_name: eip-resso-config-green
+    environment:
+      - SPRING_PROFILES_ACTIVE=production
+      - SERVER_PORT=8888
+      - DEPLOYMENT_VERSION=v1.1.0-green
+      - DEPLOYMENT_COLOR=green
+    ports:
+      - "8891:8888"
+    networks:
+      blue-green-network:
+        ipv4_address: 172.22.1.11
+
+  # Load Balancer for Blue-Green switching
+  nginx-lb:
+    image: nginx:alpine
+    container_name: eip-resso-nginx-lb
+    ports:
+      - "8892:80"
+    volumes:
+      - ./load-balancers/nginx-blue-green.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - config-server-blue
+      - config-server-green
+    networks:
+      blue-green-network:
+        ipv4_address: 172.22.1.20
+
+networks:
+  blue-green-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.22.0.0/16

@@ -1,17 +1,5 @@
-# EIP-resso Configuration Server - Production Dockerfile
+# EIP-resso Configuration Server - Simple Dockerfile (using pre-built JAR)
 
-# Build stage
-FROM maven:3.9.0-eclipse-temurin-17 AS builder
-
-WORKDIR /build
-COPY pom.xml ./
-COPY config-server/pom.xml ./config-server/
-COPY config-server/src ./config-server/src
-
-# Build the application
-RUN mvn clean package -DskipTests -pl config-server
-
-# Runtime stage
 FROM eclipse-temurin:17-jre-alpine
 
 # Create non-root user for security
@@ -21,8 +9,8 @@ RUN addgroup -g 1001 -S eipresso && \
 # Create application directory
 WORKDIR /app
 
-# Copy built JAR
-COPY --from=builder /build/config-server/target/*.jar app.jar
+# Copy pre-built JAR
+COPY target/*.jar app.jar
 
 # Create logs directory
 RUN mkdir -p /var/logs/config-server && \

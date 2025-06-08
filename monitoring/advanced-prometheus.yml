@@ -1,0 +1,46 @@
+# Advanced Prometheus Configuration for EIP-resso
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - "eip-resso-rules.yml"
+
+scrape_configs:
+  # Config Server Blue-Green Monitoring
+  - job_name: 'config-server-blue'
+    static_configs:
+      - targets: ['config-server-blue:8888']
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 10s
+
+  - job_name: 'config-server-green'
+    static_configs:
+      - targets: ['config-server-green:8888']
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 10s
+
+  # JMX Metrics via JMX Exporter
+  - job_name: 'jmx-config-server'
+    static_configs:
+      - targets: ['config-server-blue:9999', 'config-server-green:9999']
+
+  # Hazelcast Cluster Monitoring
+  - job_name: 'hazelcast-cluster'
+    static_configs:
+      - targets: ['config-server-blue:8091', 'config-server-green:8091']
+    metrics_path: '/hazelcast/metrics'
+
+  # Load Balancer Monitoring
+  - job_name: 'nginx-lb'
+    static_configs:
+      - targets: ['nginx-lb:80']
+    metrics_path: '/metrics'
+
+  # Custom EIP Pattern Metrics
+  - job_name: 'eip-patterns'
+    static_configs:
+      - targets: ['config-server-blue:8888', 'config-server-green:8888']
+    metrics_path: '/actuator/metrics'
+    params:
+      name: ['camel.routes.*', 'eip.patterns.*', 'clustering.*']

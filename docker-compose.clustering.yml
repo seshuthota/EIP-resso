@@ -9,7 +9,7 @@ networks:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.20.0.0/16
+        - subnet: 172.21.0.0/16
 
 volumes:
   postgres-cluster-data:
@@ -46,7 +46,7 @@ services:
       - "5432:5432"
     networks:
       eip-resso-cluster:
-        ipv4_address: 172.20.1.10
+        ipv4_address: 172.21.1.10
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U eip_resso_user -d eip_resso"]
       interval: 10s
@@ -62,7 +62,7 @@ services:
       - "7001:7001"
     networks:
       eip-resso-cluster:
-        ipv4_address: 172.20.1.21
+        ipv4_address: 172.21.1.21
 
   redis-cluster-2:
     image: redis:7-alpine
@@ -72,7 +72,7 @@ services:
       - "7002:7002"
     networks:
       eip-resso-cluster:
-        ipv4_address: 172.20.1.22
+        ipv4_address: 172.21.1.22
 
   redis-cluster-3:
     image: redis:7-alpine
@@ -82,7 +82,7 @@ services:
       - "7003:7003"
     networks:
       eip-resso-cluster:
-        ipv4_address: 172.20.1.23
+        ipv4_address: 172.21.1.23
 
   # RabbitMQ Cluster (3 nodes)
   rabbitmq-1:
@@ -98,7 +98,7 @@ services:
       - "15672:15672"
     networks:
       eip-resso-cluster:
-        ipv4_address: 172.20.1.31
+        ipv4_address: 172.21.1.31
 
   rabbitmq-2:
     image: rabbitmq:3-management
@@ -112,38 +112,38 @@ services:
       - rabbitmq-1
     networks:
       eip-resso-cluster:
-        ipv4_address: 172.20.1.32
+        ipv4_address: 172.21.1.32
 
   # Consul Cluster (3 nodes)
   consul-1:
-    image: consul:latest
+    image: consul:1.15
     container_name: eip-resso-consul-1
-    command: agent -server -bootstrap-expect=3 -datacenter=eip-resso -node=consul-1 -bind=172.20.1.41 -client=0.0.0.0 -ui
+    command: agent -server -bootstrap-expect=3 -datacenter=eip-resso -node=consul-1 -bind=172.21.1.41 -client=0.0.0.0 -ui
     ports:
       - "8500:8500"
     networks:
       eip-resso-cluster:
-        ipv4_address: 172.20.1.41
+        ipv4_address: 172.21.1.41
 
   consul-2:
-    image: consul:latest
+    image: consul:1.15
     container_name: eip-resso-consul-2
-    command: agent -server -retry-join=172.20.1.41 -datacenter=eip-resso -node=consul-2 -bind=172.20.1.42 -client=0.0.0.0
+    command: agent -server -retry-join=172.21.1.41 -datacenter=eip-resso -node=consul-2 -bind=172.21.1.42 -client=0.0.0.0
     depends_on:
       - consul-1
     networks:
       eip-resso-cluster:
-        ipv4_address: 172.20.1.42
+        ipv4_address: 172.21.1.42
 
   consul-3:
-    image: consul:latest
+    image: consul:1.15
     container_name: eip-resso-consul-3
-    command: agent -server -retry-join=172.20.1.41 -datacenter=eip-resso -node=consul-3 -bind=172.20.1.43 -client=0.0.0.0
+    command: agent -server -retry-join=172.21.1.41 -datacenter=eip-resso -node=consul-3 -bind=172.21.1.43 -client=0.0.0.0
     depends_on:
       - consul-1
     networks:
       eip-resso-cluster:
-        ipv4_address: 172.20.1.43
+        ipv4_address: 172.21.1.43
 
   # Elasticsearch Cluster (3 nodes)
   elasticsearch-1:
@@ -160,7 +160,7 @@ services:
       - "9200:9200"
     networks:
       eip-resso-cluster:
-        ipv4_address: 172.20.1.51
+        ipv4_address: 172.21.1.51
 
   elasticsearch-2:
     image: elasticsearch:8.8.0
@@ -174,7 +174,7 @@ services:
       - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
     networks:
       eip-resso-cluster:
-        ipv4_address: 172.20.1.52
+        ipv4_address: 172.21.1.52
 
   elasticsearch-3:
     image: elasticsearch:8.8.0
@@ -188,7 +188,7 @@ services:
       - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
     networks:
       eip-resso-cluster:
-        ipv4_address: 172.20.1.53
+        ipv4_address: 172.21.1.53
 
   # =============================================================================
   # Monitoring Services
@@ -202,10 +202,10 @@ services:
       - "8080:8080"
     environment:
       - MC_DEFAULT_CLUSTER=eip-resso-production-cluster
-      - MC_DEFAULT_CLUSTER_MEMBERS=172.20.2.11:5703,172.20.2.12:5703,172.20.2.21:5704,172.20.2.22:5704
+      - MC_DEFAULT_CLUSTER_MEMBERS=172.21.2.11:5703,172.21.2.12:5703,172.21.2.21:5704,172.21.2.22:5704
     networks:
       eip-resso-cluster:
-        ipv4_address: 172.20.1.60
+        ipv4_address: 172.21.1.60
 
   # Prometheus for metrics collection
   prometheus:
@@ -224,7 +224,7 @@ services:
       - '--web.enable-lifecycle'
     networks:
       eip-resso-cluster:
-        ipv4_address: 172.20.1.61
+        ipv4_address: 172.21.1.61
 
   # Grafana for dashboards
   grafana:
@@ -240,7 +240,7 @@ services:
       - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
     networks:
       eip-resso-cluster:
-        ipv4_address: 172.20.1.62
+        ipv4_address: 172.21.1.62
 
   # =============================================================================
   # Load Balancers
@@ -259,7 +259,7 @@ services:
       - user-service-2
     networks:
       eip-resso-cluster:
-        ipv4_address: 172.20.1.71
+        ipv4_address: 172.21.1.71
 
   # HAProxy for Product Catalog (Active-Active)
   product-catalog-lb:
@@ -274,7 +274,7 @@ services:
       - product-catalog-2
     networks:
       eip-resso-cluster:
-        ipv4_address: 172.20.1.72
+        ipv4_address: 172.21.1.72
 
   # =============================================================================
   # Microservices Clusters
@@ -301,7 +301,7 @@ services:
       - config-server
     networks:
       eip-resso-cluster:
-        ipv4_address: 172.20.2.11
+        ipv4_address: 172.21.2.11
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
       interval: 30s
@@ -329,7 +329,7 @@ services:
       - user-service-1
     networks:
       eip-resso-cluster:
-        ipv4_address: 172.20.2.12
+        ipv4_address: 172.21.2.12
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
       interval: 30s
@@ -358,7 +358,7 @@ services:
       - config-server
     networks:
       eip-resso-cluster:
-        ipv4_address: 172.20.2.21
+        ipv4_address: 172.21.2.21
 
   product-catalog-2:
     build:
@@ -382,7 +382,7 @@ services:
       - product-catalog-1
     networks:
       eip-resso-cluster:
-        ipv4_address: 172.20.2.22
+        ipv4_address: 172.21.2.22
 
   # Order Management Cluster (Active-Passive)
   order-management-primary:
@@ -405,7 +405,7 @@ services:
       - config-server
     networks:
       eip-resso-cluster:
-        ipv4_address: 172.20.2.31
+        ipv4_address: 172.21.2.31
 
   order-management-backup:
     build:
@@ -428,13 +428,13 @@ services:
       - order-management-primary
     networks:
       eip-resso-cluster:
-        ipv4_address: 172.20.2.32
+        ipv4_address: 172.21.2.32
 
   # Config Server (should be highly available)
   config-server:
     build:
-      context: ./config-server
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: config-server/Dockerfile
     container_name: eip-resso-config-server
     environment:
       - SPRING_PROFILES_ACTIVE=dev
@@ -443,7 +443,7 @@ services:
       - "8888:8888"
     networks:
       eip-resso-cluster:
-        ipv4_address: 172.20.2.100
+        ipv4_address: 172.21.2.100
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8888/actuator/health"]
       interval: 30s
