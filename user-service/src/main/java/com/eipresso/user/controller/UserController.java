@@ -1,7 +1,10 @@
 package com.eipresso.user.controller;
 
 import com.eipresso.user.dto.UserRegistrationRequest;
+import com.eipresso.user.service.JwtTokenService;
+import com.eipresso.user.service.SecurityAuditService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hazelcast.core.HazelcastInstance;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.apache.camel.ProducerTemplate;
@@ -27,6 +30,15 @@ public class UserController {
     
     @Autowired
     private ObjectMapper objectMapper;
+    
+    @Autowired
+    private JwtTokenService jwtTokenService;
+    
+    @Autowired
+    private SecurityAuditService securityAuditService;
+    
+    @Autowired
+    private HazelcastInstance hazelcastInstance;
     
     /**
      * User registration endpoint
@@ -116,22 +128,63 @@ public class UserController {
     }
     
     /**
+     * Token validation endpoint for API Gateway
+     */
+    @PostMapping("/token/validate")
+    public ResponseEntity<?> validateToken(@RequestBody Map<String, String> request, 
+                                         HttpServletRequest httpRequest) {
+        try {
+            String token = request.get("token");
+            if (token == null || token.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("error", "Token is required"));
+            }
+            
+            // Check if token is blacklisted
+            if (hazelcastInstance.getMap("jwt-blacklist").containsKey(token)) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "Token has been invalidated"));
+            }
+            
+            // Validate token
+            if (!jwtTokenService.isValidToken(token)) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "Invalid or expired token"));
+            }
+            
+            return ResponseEntity.ok(Map.of("valid", true));
+            
+        } catch (Exception e) {
+            logger.error("Token validation error: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(Map.of("error", "Token validation failed"));
+        }
+    }
+    
+    /**
      * User profile endpoint (requires authentication)
      */
     @GetMapping("/profile")
-    public ResponseEntity<?> getUserProfile(@RequestHeader("Authorization") String authHeader) {
+    public ResponseEntity<?> getUserProfile(@RequestHeader("Authorization") String authHeader,
+                                          HttpServletRequest httpRequest) {
         try {
             // Extract JWT token and validate
             String token = authHeader.replace("Bearer ", "");
             
-            Map<String, Object> headers = new HashMap<>();
-            headers.put("Authorization", authHeader);
+            if (!jwtTokenService.isValidToken(token)) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "Invalid or expired token"));
+            }
             
-            // This would typically validate JWT and return user profile
-            // For now, return a placeholder response
+            String username = jwtTokenService.extractUsername(token);
+            Long userId = jwtTokenService.extractUserId(token);
+            String userRole = jwtTokenService.extractUserRole(token);
+            
             Map<String, Object> response = new HashMap<>();
-            response.put("message", "User profile endpoint - JWT validation would go here");
-            response.put("token", token.substring(0, Math.min(token.length(), 20)) + "...");
+            response.put("userId", userId);
+            response.put("username", username);
+            response.put("role", userRole);
+            response.put("timestamp", java.time.LocalDateTime.now());
             
             return ResponseEntity.ok(response);
             
@@ -141,6 +194,37 @@ public class UserController {
             Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("error", "Unauthorized");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errorResponse);
+        }
+    }
+    
+    /**
+     * Logout endpoint - Blacklist JWT token
+     */
+    @PostMapping("/logout")
+    public ResponseEntity<?> logout(@RequestHeader("Authorization") String authHeader,
+                                  HttpServletRequest httpRequest) {
+        try {
+            String token = authHeader.replace("Bearer ", "");
+            String userId = jwtTokenService.extractUserId(token).toString();
+            
+            // Add token to blacklist
+            hazelcastInstance.getMap("jwt-blacklist").put(token, "BLACKLISTED", 
+                jwtTokenService.getTokenExpirationTime(), java.util.concurrent.TimeUnit.SECONDS);
+            
+            // Log security event
+            String ipAddress = getClientIpAddress(httpRequest);
+            securityAuditService.logTokenBlacklist(userId, "User logout");
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("message", "Logout successful");
+            response.put("timestamp", java.time.LocalDateTime.now());
+            
+            return ResponseEntity.ok(response);
+            
+        } catch (Exception e) {
+            logger.error("Logout error: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("error", "Logout failed"));
         }
     }
     
