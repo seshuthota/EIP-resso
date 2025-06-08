@@ -1,14 +1,16 @@
 spring:
+  profiles:
+    active: test
   datasource:
     url: jdbc:h2:mem:testdb
     driver-class-name: org.h2.Driver
     username: sa
-    password:
+    password: password
   jpa:
     hibernate:
       ddl-auto: create-drop
-    show-sql: false
     database-platform: org.hibernate.dialect.H2Dialect
+    show-sql: false
   h2:
     console:
       enabled: false
@@ -33,7 +35,7 @@ spring:
 camel:
   springboot:
     main-run-controller: false
-    routes-include-pattern: ""
+    routes-include-pattern: "classpath:camel/test-*.xml"
     routes-exclude-pattern: "**"
 
 # Disable Hazelcast for tests
@@ -52,9 +54,8 @@ eipresso:
 logging:
   level:
     com.eipresso: DEBUG
-    org.springframework.web: DEBUG
-    org.springframework.security: DEBUG
-    org.apache.camel: DEBUG
+    org.springframework: WARN
+    org.apache.camel: WARN
 
 # Test-specific configuration
 test:

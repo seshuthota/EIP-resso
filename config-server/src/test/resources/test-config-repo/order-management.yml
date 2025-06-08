@@ -1,0 +1,31 @@
+# Order Management Service Configuration
+spring:
+  application:
+    name: order-management
+    
+  datasource:
+    url: jdbc:postgresql://localhost:5432/order_management_test
+    username: order_management_user
+    password: order_test_password
+
+# Order processing settings
+order-management:
+  processing:
+    timeout: 300000
+    max-items: 50
+  status:
+    auto-transitions: true
+    notification-enabled: true
+  event-sourcing:
+    enabled: true
+    retention-days: 365
+    
+# Business rules
+business-rules:
+  order:
+    min-amount: 1.00
+    max-amount: 1000.00
+    preparation-time: 900000
+  payment:
+    timeout: 120000
+    retry-attempts: 3 

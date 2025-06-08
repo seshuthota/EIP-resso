@@ -1,0 +1,36 @@
+# Payment Service Configuration
+spring:
+  application:
+    name: payment-service
+    
+  datasource:
+    url: jdbc:postgresql://localhost:5432/payment_service_test
+    username: payment_service_user
+    password: payment_test_password
+
+# Payment gateway settings
+payment:
+  gateways:
+    stripe:
+      enabled: true
+      api-key: test_stripe_key
+      webhook-secret: test_webhook_secret
+    paypal:
+      enabled: true
+      client-id: test_paypal_client
+      client-secret: test_paypal_secret
+  processing:
+    timeout: 30000
+    retry-attempts: 3
+    circuit-breaker:
+      enabled: true
+      failure-threshold: 5
+      
+# Security settings
+security:
+  encryption:
+    enabled: true
+    algorithm: AES-256
+  audit:
+    enabled: true
+    retention-days: 2555 

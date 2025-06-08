@@ -1,0 +1,39 @@
+# Analytics Service Configuration
+spring:
+  application:
+    name: analytics-service
+    
+  datasource:
+    url: jdbc:postgresql://localhost:5432/analytics_service_test
+    username: analytics_service_user
+    password: analytics_test_password
+
+# Elasticsearch configuration
+elasticsearch:
+  host: localhost
+  port: 9200
+  cluster-name: eip-resso-analytics
+  index-prefix: eip-resso-test
+
+# Analytics settings
+analytics:
+  event-sourcing:
+    enabled: true
+    batch-size: 1000
+    flush-interval: 30000
+  cqrs:
+    enabled: true
+    read-models:
+      - customer-analytics
+      - sales-analytics
+      - inventory-analytics
+  streaming:
+    enabled: true
+    window-size: 300000
+    
+# Reporting
+reporting:
+  schedules:
+    daily-sales: "0 0 9 * * ?"
+    weekly-summary: "0 0 9 ? * MON"
+    monthly-report: "0 0 9 1 * ?" 

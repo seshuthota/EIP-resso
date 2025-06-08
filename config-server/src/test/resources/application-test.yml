@@ -1,0 +1,45 @@
+server:
+  port: 0  # Random port for tests
+
+spring:
+  profiles:
+    active: test
+  cloud:
+    config:
+      server:
+        git:
+          uri: file://${java.io.tmpdir}/test-config-repo
+          default-label: main
+          clone-on-start: true
+        health:
+          enabled: true
+  security:
+    user:
+      name: admin
+      password: secret
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+  endpoint:
+    health:
+      show-details: always
+
+# Camel configuration for testing
+camel:
+  springboot:
+    name: config-server-test
+  component:
+    micrometer:
+      metrics-registry: prometheusMeterRegistry
+
+# Logging configuration for tests
+logging:
+  level:
+    com.eipresso: DEBUG
+    org.apache.camel: INFO
+    org.springframework.cloud.config: DEBUG
+  pattern:
+ 

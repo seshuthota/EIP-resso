@@ -1,0 +1,238 @@
+# Order Orchestration Service Configuration
+# Advanced Apache Camel with Saga Pattern, Process Manager, and Compensating Actions
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/eip_resso
+    username: eip_resso_user
+    password: eip_resso_pass
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      validation-timeout: 5000
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+        use_sql_comments: true
+        jdbc:
+          batch_size: 20
+          fetch_size: 100
+
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: eip_resso
+    password: eip_resso_pass
+    virtual-host: /
+    connection-timeout: 60000
+    template:
+      retry:
+        enabled: true
+        initial-interval: 1000
+        max-attempts: 3
+        max-interval: 10000
+        multiplier: 2.0
+
+  redis:
+    host: localhost
+    port: 6379
+    timeout: 2000ms
+    database: 3
+    jedis:
+      pool:
+        max-active: 8
+        max-idle: 8
+        min-idle: 0
+        max-wait: -1ms
+
+server:
+  port: 8089
+  servlet:
+    context-path: /
+  compression:
+    enabled: true
+    mime-types: application/json,application/xml,text/html,text/xml,text/plain
+
+# Management and Monitoring
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: always
+      group:
+        readiness:
+          include: db,rabbitmq,redis
+        liveness:
+          include: ping
+    metrics:
+      enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    distribution:
+      percentiles-histogram:
+        "[http.server.requests]": true
+      percentiles:
+        "[http.server.requests]": 0.5, 0.9, 0.95, 0.99
+  server:
+    port: 8089
+
+# Apache Camel Configuration
+camel:
+  springboot:
+    name: order-orchestration-service
+    main-run-controller: true
+    auto-startup: true
+    allow-use-original-message: false
+    endpoint-runtime-statistics-enabled: true
+    load-statistics-enabled: true
+    message-history: true
+  component:
+    jpa:
+      enabled: true
+    rabbitmq:
+      enabled: true
+    timer:
+      enabled: true
+    direct:
+      enabled: true
+    rest:
+      enabled: true
+  rest:
+    component: servlet
+    binding-mode: json
+    data-format-property:
+      prettyPrint: true
+    api-context-path: /api-doc
+    api-property:
+      api.title: "Order Orchestration Service API"
+      api.version: "1.0.0"
+      cors: true
+
+# Hazelcast Clustering Configuration (Active-Passive for Workflow Consistency)
+hazelcast:
+  cluster-name: eip-resso-order-orchestration
+  instance-name: order-orchestration-${server.port}
+  network:
+    port: 5709
+    port-auto-increment: true
+    port-count: 10
+    public-address: localhost
+  members:
+    - 127.0.0.1:5709
+    - 127.0.0.1:5710
+  map:
+    saga-state:
+      time-to-live-seconds: 3600
+      max-idle-seconds: 1800
+      backup-count: 1
+      async-backup-count: 1
+    workflow-coordination:
+      time-to-live-seconds: 7200
+      max-idle-seconds: 3600
+      backup-count: 1
+    compensation-tracking:
+      time-to-live-seconds: 86400
+      backup-count: 2
+  split-brain-protection:
+    enabled: true
+    minimum-cluster-size: 2
+
+# Business Configuration
+order-orchestration:
+  saga:
+    timeout-minutes: 30
+    retry-attempts: 3
+    compensation-timeout-minutes: 15
+  workflow:
+    max-parallel-steps: 5
+    step-timeout-seconds: 120
+    monitoring-interval-seconds: 30
+  service-endpoints:
+    user-service: "http://localhost:8081"
+    product-catalog-service: "http://localhost:8082"
+    order-management-service: "http://localhost:8083"
+    payment-service: "http://localhost:8084"
+    inventory-service: "http://localhost:8085"
+    notification-service: "http://localhost:8086"
+    analytics-service: "http://localhost:8087"
+  patterns:
+    enabled:
+      saga: true
+      process-manager: true
+      scatter-gather: true
+      compensation: true
+      request-reply: true
+    saga:
+      coordination-mode: "orchestration"
+      state-persistence: "hazelcast"
+      event-sourcing: true
+    compensation:
+      max-retry-attempts: 3
+      compensation-order: "reverse"
+      partial-compensation: true
+
+# Logging Configuration
+logging:
+  level:
+    com.eipresso.orderorchestration: DEBUG
+    org.apache.camel: INFO
+    org.springframework: INFO
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/order-orchestration-service.log
+    max-size: 100MB
+    max-history: 30
+
+# Performance and Resilience Configuration
+resilience4j:
+  circuitbreaker:
+    instances:
+      payment-service:
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30000
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+      inventory-service:
+        failure-rate-threshold: 60
+        wait-duration-in-open-state: 60000
+        sliding-window-size: 8
+      notification-service:
+        failure-rate-threshold: 70
+        wait-duration-in-open-state: 20000
+        sliding-window-size: 6
+  retry:
+    instances:
+      default:
+        max-attempts: 3
+        wait-duration: 1000
+        exponential-backoff-multiplier: 2
+        retry-exceptions:
+          - java.net.ConnectException
+          - java.net.SocketTimeoutException
+  timeout:
+    instances:
+      default:
+        timeout-duration: 30s
+      long-running:
+        timeout-duration: 120s 

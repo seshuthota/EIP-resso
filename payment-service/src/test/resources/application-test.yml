@@ -1,0 +1,168 @@
+spring:
+  application:
+    name: payment-service-test
+  
+  profiles:
+    active: test
+    
+  # Test Database Configuration (H2 in-memory)
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: 
+    
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+        format_sql: false
+        
+  h2:
+    console:
+      enabled: false
+
+# Camel Configuration for Testing
+camel:
+  springboot:
+    name: payment-service-test-camel
+    main-run-controller: true
+    use-breadcrumb-id: true
+    
+  # Mock endpoints for testing
+  component:
+    direct:
+      timeout: 30000
+    mock:
+      enabled: true
+      
+  # Test-specific route configuration
+  rest:
+    enabled: false
+    
+# Test-specific logging
+logging:
+  level:
+    com.eipresso.payment: DEBUG
+    org.apache.camel: INFO
+    org.springframework.test: INFO
+    org.junit: INFO
+  pattern:
+    console: "%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+
+# Management and monitoring for tests
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,camel
+  endpoint:
+    health:
+      show-details: always
+
+# Hazelcast test configuration
+hazelcast:
+  enabled: false  # Disable clustering for unit tests
+  config: |
+    hazelcast:
+      instance-name: payment-service-test
+      cluster-name: payment-test-cluster
+      network:
+        port:
+          auto-increment: false
+          port: 5704
+        join:
+          multicast:
+            enabled: false
+          tcp-ip:
+            enabled: true
+            members:
+              - 127.0.0.1:5704
+
+# Test-specific application properties
+app:
+  payment:
+    # Gateway configurations for testing
+    gateways:
+      stripe:
+        url: http://localhost:8080/mock/stripe
+        timeout: 5000
+        retries: 2
+      paypal:
+        url: http://localhost:8080/mock/paypal
+        timeout: 7000
+        retries: 2
+      mock:
+        url: http://localhost:8080/mock/gateway
+        timeout: 1000
+        retries: 3
+        
+    # Fraud detection settings
+    fraud:
+      enabled: true
+      highRiskThreshold: 75.0
+      blacklistCountries: ["HIGH_RISK_COUNTRY", "BLOCKED_COUNTRY"]
+      
+    # Retry configuration
+    retry:
+      maxAttempts: 3
+      backoffMultiplier: 2
+      initialDelay: 1000
+      maxDelay: 10000
+      
+    # Circuit breaker settings
+    circuitBreaker:
+      enabled: true
+      failureThreshold: 5
+      timeout: 30000
+      resetTimeout: 60000
+      
+    # Performance settings for testing
+    performance:
+      batchSize: 100
+      threadPoolSize: 10
+      queueCapacity: 1000
+      
+    # Test-specific audit configuration
+    audit:
+      enabled: true
+      asyncProcessing: false  # Synchronous for testing
+      retentionDays: 7
+
+# Test server configuration
+server:
+  port: 0  # Random port for tests
+  
+# External service mock endpoints
+mock:
+  services:
+    stripe:
+      enabled: true
+      successRate: 0.9
+      averageResponseTime: 100
+    paypal:
+      enabled: true
+      successRate: 0.95
+      averageResponseTime: 150
+    fraud:
+      enabled: true
+      highRiskRate: 0.1
+      
+# Performance test configuration
+performance:
+  tests:
+    enabled: false  # Enable via environment variable
+    concurrentUsers: 100
+    batchSize: 500
+    testDuration: 300  # seconds
+    
+# Test data configuration
+test:
+  data:
+    cleanup: true
+    generate: true
+    customers: 100
+    payments: 1000 

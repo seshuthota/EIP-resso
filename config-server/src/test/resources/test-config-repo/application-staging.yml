@@ -1,0 +1,44 @@
+# Staging Environment Configuration
+spring:
+  datasource:
+    url: jdbc:postgresql://staging-db:5432/eip_resso_staging
+    username: eip_resso_staging_user
+    password: staging_password
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      
+  redis:
+    host: staging-redis
+    port: 6379
+    database: 0
+    
+  rabbitmq:
+    host: staging-rabbitmq
+    port: 5672
+    username: staging_user
+    password: staging_password
+
+# Staging logging (more verbose for testing)
+logging:
+  level:
+    com.eipresso: DEBUG
+    org.apache.camel: INFO
+    org.springframework: INFO
+
+# Staging monitoring
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+  endpoint:
+    health:
+      show-details: always
+
+# Staging-specific settings
+eip-resso:
+  staging:
+    data-retention-days: 30
+    performance-testing: true
+    mock-external-services: true 

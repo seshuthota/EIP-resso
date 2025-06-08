@@ -1,0 +1,46 @@
+# EIP-resso Test Configuration Repository
+# Default configuration for all coffee shop services
+
+# Common coffee shop configurations
+eip-resso:
+  coffee-shop:
+    name: "EIP-resso Test Cafe"
+    location: "Test Location"
+    timezone: "America/Los_Angeles"
+    
+# Database configurations
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/eip_resso_test
+    username: eip_resso_user
+    password: test_password
+    driver-class-name: org.postgresql.Driver
+    
+  # Redis configuration
+  redis:
+    host: localhost
+    port: 6379
+    database: 0
+    
+  # RabbitMQ configuration  
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+
+# Management endpoints
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+
+# Logging
+logging:
+  level:
+    com.eipresso: INFO
+    org.apache.camel: INFO 

@@ -8,48 +8,39 @@ import org.springframework.stereotype.Component;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Streaming Pattern Implementation for Analytics Service
  * 
- * EIP Pattern: Streaming (Real-time Event Processing)
- * Purpose: Process continuous streams of business events for real-time analytics
+ * EIP Pattern: Streaming Pattern
+ * Purpose: Real-time event processing for live dashboards and instant analytics
  * Clustering: Active-Active compatible (distributed stream processing)
  * 
- * Key Features:
- * - Real-time event stream processing
- * - Windowed aggregations (time-based windows)
- * - Stream filtering and transformation
- * - Live dashboard updates
- * - High-throughput event ingestion
- * - Stream correlation and enrichment
- * 
  * Routes:
- * 1. stream-processor-entry: Main streaming entry point
- * 2. real-time-event-stream: Process continuous event streams
- * 3. windowed-aggregator: Time-window based aggregations
- * 4. live-dashboard-updater: Real-time dashboard updates
- * 5. stream-filter: Filter events based on criteria
- * 6. stream-enricher: Enrich events with additional data
- * 7. high-frequency-processor: Handle high-frequency events
- * 8. stream-correlator: Correlate related events in stream
- * 9. streaming-dead-letter: Handle streaming failures
+ * 1. streaming-entry: Main streaming entry point
+ * 2. real-time-processor: Process events in real-time
+ * 3. live-dashboard-streamer: Stream data to live dashboards
+ * 4. event-window-processor: Time-window based processing
+ * 5. real-time-aggregator: Real-time metrics aggregation
+ * 6. streaming-analytics-processor: Streaming analytics calculations
  */
 @Component
 public class StreamingRoute extends RouteBuilder {
 
-    // Counters for streaming metrics
-    private final AtomicLong eventCounter = new AtomicLong(0);
-    private final AtomicLong processedEventsCounter = new AtomicLong(0);
-    private final AtomicLong filteredEventsCounter = new AtomicLong(0);
+    // Real-time metrics storage
+    private final Map<String, AtomicLong> realtimeCounters = new ConcurrentHashMap<>();
+    private final Map<String, Double> realtimeSums = new ConcurrentHashMap<>();
+    private final Map<String, Object> liveMetrics = new ConcurrentHashMap<>();
 
     @Override
     public void configure() throws Exception {
         
         // Global error handling for Streaming pattern
         errorHandler(deadLetterChannel("direct:streaming-dead-letter")
-            .maximumRedeliveries(2)
+            .maximumRedeliveries(3)
             .redeliveryDelay(500)
             .retryAttemptedLogLevel(LoggingLevel.WARN)
             .useExponentialBackOff()
@@ -57,440 +48,322 @@ public class StreamingRoute extends RouteBuilder {
             .maximumRedeliveryDelay(10000));
 
         /**
-         * Route 1: Stream Processor Entry Point
-         * Purpose: Main entry point for streaming event processing
+         * Route 1: Streaming Entry Point
          */
-        from("direct:stream-processor-entry")
-            .routeId("stream-processor-entry")
+        from("direct:streaming-entry")
+            .routeId("streaming-entry")
             .description("Streaming Pattern: Main streaming entry point")
-            .log("📊 Starting stream processing for event: ${header.eventType}")
+            .log("🌊 Starting real-time stream processing: ${header.eventType}")
             
-            // Increment event counter
             .process(exchange -> {
-                long eventCount = eventCounter.incrementAndGet();
-                exchange.getIn().setHeader("streamEventId", eventCount);
+                String streamId = UUID.randomUUID().toString();
+                exchange.getIn().setHeader("streamId", streamId);
                 exchange.getIn().setHeader("streamTimestamp", LocalDateTime.now());
-                exchange.getIn().setHeader("streamingNode", "analytics-service");
+                exchange.getIn().setHeader("processingMode", "REAL_TIME");
                 
-                log.info("📊 Stream event #{} received: {}", eventCount, 
-                        exchange.getIn().getHeader("eventType"));
+                String eventType = exchange.getIn().getHeader("eventType", String.class);
+                exchange.getIn().setHeader("streamingEnabled", true);
+                
+                log.info("🌊 Stream processing initiated: {} [{}]", eventType, streamId);
             })
             
-            // Route to real-time event stream
-            .to("direct:real-time-event-stream")
-            
-            .log("✅ Stream processing initiated for event #${header.streamEventId}");
+            .to("direct:real-time-processor")
+            .to("direct:live-dashboard-streamer")
+            .log("✅ Stream processing completed for ${header.streamId}");
 
         /**
-         * Route 2: Real-time Event Stream
-         * Purpose: Process continuous event streams
+         * Route 2: Real-Time Processor
          */
-        from("direct:real-time-event-stream")
-            .routeId("real-time-event-stream")
-            .description("Streaming Pattern: Real-time event stream processing")
-            .log("🌊 Processing real-time event stream")
-            
-            // Filter events based on streaming criteria
-            .to("direct:stream-filter")
-            
-            // Only process events that pass the filter
-            .choice()
-                .when(header("streamFiltered").isEqualTo(false))
-                    // Enrich event with streaming context
-                    .to("direct:stream-enricher")
-                    
-                    // Process based on event type and frequency
-                    .choice()
-                        .when(header("eventFrequency").isEqualTo("HIGH"))
-                            .to("direct:high-frequency-processor")
-                        .when(header("eventType").in("ORDER_CREATED", "ORDER_PAID", "ORDER_DELIVERED"))
-                            .to("direct:order-stream-processor")
-                        .when(header("eventType").in("USER_LOGIN", "USER_REGISTERED"))
-                            .to("direct:user-stream-processor")
-                        .when(header("eventType").in("NOTIFICATION_SENT", "NOTIFICATION_OPENED"))
-                            .to("direct:notification-stream-processor")
-                        .otherwise()
-                            .to("direct:generic-stream-processor")
-                    .end()
-                    
-                    // Update windowed aggregations
-                    .to("direct:windowed-aggregator")
-                    
-                    // Update live dashboard
-                    .to("direct:live-dashboard-updater")
-                    
-                    // Correlate with other stream events
-                    .to("direct:stream-correlator")
-                    
-                    // Increment processed counter
-                    .process(exchange -> {
-                        long processedCount = processedEventsCounter.incrementAndGet();
-                        exchange.getIn().setHeader("totalProcessed", processedCount);
-                        
-                        log.info("🌊 Stream event processed: #{} (Total: {})", 
-                                exchange.getIn().getHeader("streamEventId"), processedCount);
-                    })
-                .otherwise()
-                    .log("🚫 Event filtered from stream: ${header.eventType}")
-            .end()
-            
-            .log("✅ Real-time stream processing completed");
-
-        /**
-         * Route 3: Windowed Aggregator
-         * Purpose: Time-window based aggregations for streaming data
-         */
-        from("direct:windowed-aggregator")
-            .routeId("windowed-aggregator")
-            .description("Streaming Pattern: Windowed aggregations")
-            .log("📊 Processing windowed aggregations")
+        from("direct:real-time-processor")
+            .routeId("real-time-processor")
+            .description("Streaming Pattern: Real-time event processing")
+            .log("⚡ Processing event in real-time: ${header.eventType}")
             
             .process(exchange -> {
                 String eventType = exchange.getIn().getHeader("eventType", String.class);
-                LocalDateTime timestamp = exchange.getIn().getHeader("streamTimestamp", LocalDateTime.class);
+                LocalDateTime processingTime = LocalDateTime.now();
                 
-                // Determine aggregation windows (1min, 5min, 15min, 1hour)
-                long minute = timestamp.getMinute();
-                long hour = timestamp.getHour();
+                // Update real-time counters
+                updateRealtimeCounter("events.total");
+                updateRealtimeCounter("events." + eventType.toLowerCase());
                 
-                // 1-minute window
-                String window1Min = String.format("%02d:%02d", hour, minute);
-                // 5-minute window  
-                String window5Min = String.format("%02d:%02d", hour, (minute / 5) * 5);
-                // 15-minute window
-                String window15Min = String.format("%02d:%02d", hour, (minute / 15) * 15);
-                // 1-hour window
-                String window1Hour = String.format("%02d:00", hour);
+                exchange.getIn().setHeader("realtimeProcessed", true);
+                exchange.getIn().setHeader("processingLatency", System.currentTimeMillis());
                 
-                exchange.getIn().setHeader("window1Min", window1Min);
-                exchange.getIn().setHeader("window5Min", window5Min);
-                exchange.getIn().setHeader("window15Min", window15Min);
-                exchange.getIn().setHeader("window1Hour", window1Hour);
-                
-                // Set aggregation keys
-                exchange.getIn().setHeader("aggKey1Min", eventType + ":" + window1Min);
-                exchange.getIn().setHeader("aggKey5Min", eventType + ":" + window5Min);
-                exchange.getIn().setHeader("aggKey15Min", eventType + ":" + window15Min);
-                exchange.getIn().setHeader("aggKey1Hour", eventType + ":" + window1Hour);
-                
-                log.info("📊 Windowed aggregation for {}: 1min={}, 5min={}, 15min={}, 1hr={}", 
-                        eventType, window1Min, window5Min, window15Min, window1Hour);
+                log.info("⚡ Real-time processing: {} - Total Events: {}", 
+                        eventType, getRealtimeCount("events.total"));
             })
             
-            // Update aggregation counters in parallel
             .multicast()
                 .parallelProcessing(true)
-                .to("direct:update-1min-window",
-                   "direct:update-5min-window", 
-                   "direct:update-15min-window",
-                   "direct:update-1hour-window")
+                .to("direct:event-window-processor",
+                   "direct:real-time-aggregator",
+                   "direct:streaming-analytics-processor")
             .end()
             
-            .log("✅ Windowed aggregations updated");
+            .log("✅ Real-time processing completed");
 
         /**
-         * Route 4: Live Dashboard Updater
-         * Purpose: Real-time dashboard updates
+         * Route 3: Live Dashboard Streamer
          */
-        from("direct:live-dashboard-updater")
-            .routeId("live-dashboard-updater")
-            .description("Streaming Pattern: Live dashboard updates")
-            .log("📈 Updating live dashboard")
-            
-            .process(exchange -> {
-                String eventType = exchange.getIn().getHeader("eventType", String.class);
-                LocalDateTime timestamp = exchange.getIn().getHeader("streamTimestamp", LocalDateTime.class);
-                
-                // Build real-time dashboard update
-                Map<String, Object> dashboardUpdate = new HashMap<>();
-                dashboardUpdate.put("eventType", eventType);
-                dashboardUpdate.put("timestamp", timestamp);
-                dashboardUpdate.put("totalEvents", eventCounter.get());
-                dashboardUpdate.put("processedEvents", processedEventsCounter.get());
-                dashboardUpdate.put("filteredEvents", filteredEventsCounter.get());
-                dashboardUpdate.put("processingRate", calculateProcessingRate());
-                dashboardUpdate.put("systemHealth", "HEALTHY");
-                
-                // Event-specific dashboard updates
-                if (eventType.startsWith("ORDER_")) {
-                    dashboardUpdate.put("ordersToday", processedEventsCounter.get() % 100 + 45);
-                    dashboardUpdate.put("revenueToday", (processedEventsCounter.get() % 1000) * 4.67);
-                } else if (eventType.startsWith("USER_")) {
-                    dashboardUpdate.put("activeUsers", processedEventsCounter.get() % 50 + 20);
-                    dashboardUpdate.put("newUsersToday", processedEventsCounter.get() % 10 + 5);
-                } else if (eventType.startsWith("NOTIFICATION_")) {
-                    dashboardUpdate.put("notificationsSent", processedEventsCounter.get() % 200 + 150);
-                    dashboardUpdate.put("engagementRate", (processedEventsCounter.get() % 30) + 65);
-                }
-                
-                exchange.getIn().setBody(dashboardUpdate);
-                exchange.getIn().setHeader("dashboardUpdateType", "REAL_TIME");
-                
-                log.info("📈 Dashboard update prepared for: {}", eventType);
-            })
-            
-            // Send to dashboard via WebSocket (mocked with direct endpoint)
-            .to("direct:websocket-dashboard-update")
-            
-            // Store update for dashboard history
-            .to("redis:dashboard-updates?command=LPUSH&keyPrefix=dashboard-history")
-            
-            .log("✅ Live dashboard updated");
-
-        /**
-         * Route 5: Stream Filter
-         * Purpose: Filter events based on streaming criteria
-         */
-        from("direct:stream-filter")
-            .routeId("stream-filter")
-            .description("Streaming Pattern: Stream event filtering")
-            .log("🔍 Filtering stream event")
-            
-            .process(exchange -> {
-                String eventType = exchange.getIn().getHeader("eventType", String.class);
-                String priority = exchange.getIn().getHeader("priority", String.class);
-                
-                boolean shouldFilter = false;
-                
-                // Filter criteria
-                if (eventType == null || eventType.isEmpty()) {
-                    shouldFilter = true;
-                    log.warn("🚫 Filtering event: Missing event type");
-                } else if ("TEST_EVENT".equals(eventType)) {
-                    shouldFilter = true;
-                    log.info("🚫 Filtering test event");
-                } else if ("LOW".equals(priority) && Math.random() > 0.3) {
-                    shouldFilter = true;
-                    log.info("🚫 Filtering low priority event (30% sampling)");
-                }
-                
-                exchange.getIn().setHeader("streamFiltered", shouldFilter);
-                
-                if (shouldFilter) {
-                    filteredEventsCounter.incrementAndGet();
-                } else {
-                    // Set streaming metadata for accepted events
-                    exchange.getIn().setHeader("streamAccepted", true);
-                    exchange.getIn().setHeader("filterReason", "ACCEPTED");
-                }
-                
-                log.info("🔍 Stream filter result: {} (Filtered: {})", eventType, shouldFilter);
-            })
-            
-            .log("✅ Stream filtering completed");
-
-        /**
-         * Route 6: Stream Enricher
-         * Purpose: Enrich events with additional streaming context
-         */
-        from("direct:stream-enricher")
-            .routeId("stream-enricher")
-            .description("Streaming Pattern: Stream event enrichment")
-            .log("💎 Enriching stream event")
-            
-            .process(exchange -> {
-                String eventType = exchange.getIn().getHeader("eventType", String.class);
-                LocalDateTime timestamp = exchange.getIn().getHeader("streamTimestamp", LocalDateTime.class);
-                
-                // Enrich with streaming metadata
-                exchange.getIn().setHeader("streamingLatency", "15ms");
-                exchange.getIn().setHeader("streamingThroughput", "1250 events/sec");
-                exchange.getIn().setHeader("streamPosition", eventCounter.get());
-                
-                // Determine event frequency classification
-                String frequency = "NORMAL";
-                if (eventType.equals("USER_LOGIN") || eventType.equals("NOTIFICATION_SENT")) {
-                    frequency = "HIGH";
-                } else if (eventType.equals("ORDER_CREATED") || eventType.equals("ORDER_PAID")) {
-                    frequency = "MEDIUM";
-                }
-                exchange.getIn().setHeader("eventFrequency", frequency);
-                
-                // Add geolocation context (mock)
-                exchange.getIn().setHeader("region", "US-EAST");
-                exchange.getIn().setHeader("timezone", "America/New_York");
-                
-                // Add business context
-                int hour = timestamp.getHour();
-                if (hour >= 6 && hour <= 10) {
-                    exchange.getIn().setHeader("businessPeriod", "MORNING_RUSH");
-                } else if (hour >= 11 && hour <= 14) {
-                    exchange.getIn().setHeader("businessPeriod", "LUNCH_PEAK");
-                } else if (hour >= 15 && hour <= 18) {
-                    exchange.getIn().setHeader("businessPeriod", "AFTERNOON");
-                } else if (hour >= 19 && hour <= 21) {
-                    exchange.getIn().setHeader("businessPeriod", "EVENING");
-                } else {
-                    exchange.getIn().setHeader("businessPeriod", "OFF_PEAK");
-                }
-                
-                log.info("💎 Stream enrichment: {} -> Frequency: {}, Period: {}", 
-                        eventType, frequency, exchange.getIn().getHeader("businessPeriod"));
-            })
-            
-            .log("✅ Stream enrichment completed");
-
-        /**
-         * Route 7: High Frequency Processor
-         * Purpose: Handle high-frequency events with optimized processing
-         */
-        from("direct:high-frequency-processor")
-            .routeId("high-frequency-processor")
-            .description("Streaming Pattern: High-frequency event processing")
-            .log("⚡ Processing high-frequency event")
+        from("direct:live-dashboard-streamer")
+            .routeId("live-dashboard-streamer")
+            .description("Streaming Pattern: Stream data to live dashboards")
+            .log("📊 Streaming to live dashboards")
             
             .process(exchange -> {
                 String eventType = exchange.getIn().getHeader("eventType", String.class);
                 
-                // Optimized processing for high-frequency events
-                exchange.getIn().setHeader("processingMode", "HIGH_FREQUENCY");
-                exchange.getIn().setHeader("batchable", true);
-                exchange.getIn().setHeader("cacheEnabled", true);
+                Map<String, Object> dashboardData = new HashMap<>();
+                dashboardData.put("eventType", eventType);
+                dashboardData.put("timestamp", LocalDateTime.now());
+                dashboardData.put("totalEvents", getRealtimeCount("events.total"));
+                dashboardData.put("eventTypeCount", getRealtimeCount("events." + eventType.toLowerCase()));
+                dashboardData.put("streamingMode", "LIVE");
                 
-                // Add sampling for very high frequency events
-                if (eventCounter.get() % 10 == 0) {
-                    exchange.getIn().setHeader("sampled", true);
-                    log.info("⚡ Sampled high-frequency event: {} (every 10th)", eventType);
-                } else {
-                    exchange.getIn().setHeader("sampled", false);
-                }
+                // Store live metrics for dashboard consumption
+                liveMetrics.put("latest_event", dashboardData);
+                liveMetrics.put("last_update", LocalDateTime.now());
+                
+                exchange.getIn().setBody(dashboardData);
+                
+                log.info("📊 Dashboard streaming: {} - Live Update", eventType);
             })
             
-            // Process only sampled events or specific types
             .choice()
-                .when(header("sampled").isEqualTo(true))
-                    .to("direct:detailed-high-frequency-processing")
+                .when(header("eventType").startsWith("ORDER_"))
+                    .to("direct:order-dashboard-streamer")
+                .when(header("eventType").startsWith("USER_"))
+                    .to("direct:user-dashboard-streamer")
                 .otherwise()
-                    .to("direct:lightweight-high-frequency-processing")
+                    .to("direct:generic-dashboard-streamer")
             .end()
             
-            .log("✅ High-frequency processing completed");
+            .log("✅ Live dashboard streaming completed");
 
         /**
-         * Route 8: Stream Correlator
-         * Purpose: Correlate related events in the stream
+         * Route 4: Event Window Processor
          */
-        from("direct:stream-correlator")
-            .routeId("stream-correlator")
-            .description("Streaming Pattern: Stream event correlation")
-            .log("🔗 Correlating stream events")
+        from("direct:event-window-processor")
+            .routeId("event-window-processor")
+            .description("Streaming Pattern: Time-window based processing")
+            .log("⏰ Processing time-window analytics")
+            
+            .process(exchange -> {
+                LocalDateTime now = LocalDateTime.now();
+                LocalDateTime windowStart = now.minusMinutes(5); // 5-minute window
+                
+                exchange.getIn().setHeader("windowStart", windowStart);
+                exchange.getIn().setHeader("windowEnd", now);
+                exchange.getIn().setHeader("windowSize", "5_MINUTES");
+                
+                // Calculate window metrics
+                long windowEventCount = getRealtimeCount("events.total");
+                double eventRate = windowEventCount / 5.0; // events per minute
+                
+                Map<String, Object> windowMetrics = new HashMap<>();
+                windowMetrics.put("windowStart", windowStart);
+                windowMetrics.put("windowEnd", now);
+                windowMetrics.put("eventCount", windowEventCount);
+                windowMetrics.put("eventRate", eventRate);
+                
+                exchange.getIn().setBody(windowMetrics);
+                
+                log.info("⏰ Window metrics: {} events, {} per minute", 
+                        windowEventCount, String.format("%.2f", eventRate));
+            })
+            
+            .to("direct:window-analytics-aggregator")
+            .log("✅ Time-window processing completed");
+
+        /**
+         * Route 5: Real-Time Aggregator
+         */
+        from("direct:real-time-aggregator")
+            .routeId("real-time-aggregator")
+            .description("Streaming Pattern: Real-time metrics aggregation")
+            .log("📊 Real-time aggregation processing")
             
             .process(exchange -> {
                 String eventType = exchange.getIn().getHeader("eventType", String.class);
-                String correlationId = exchange.getIn().getHeader("correlationId", String.class);
-                String userId = exchange.getIn().getHeader("userId", String.class);
-                String orderId = exchange.getIn().getHeader("orderId", String.class);
                 
-                // Build correlation context for streaming
-                StringBuilder correlationContext = new StringBuilder();
-                correlationContext.append("stream:").append(eventType);
+                Map<String, Object> realtimeAggregation = new HashMap<>();
+                realtimeAggregation.put("eventType", eventType);
+                realtimeAggregation.put("aggregationTimestamp", LocalDateTime.now());
+                realtimeAggregation.put("totalEvents", getRealtimeCount("events.total"));
                 
-                if (correlationId != null) {
-                    correlationContext.append(":corr:").append(correlationId);
-                }
-                if (userId != null) {
-                    correlationContext.append(":user:").append(userId);
-                }
-                if (orderId != null) {
-                    correlationContext.append(":order:").append(orderId);
+                // Event type specific aggregations
+                if (eventType.startsWith("ORDER_")) {
+                    realtimeAggregation.put("orderEvents", getRealtimeCount("events.order_"));
+                    realtimeAggregation.put("category", "order");
+                } else if (eventType.startsWith("USER_")) {
+                    realtimeAggregation.put("userEvents", getRealtimeCount("events.user_"));
+                    realtimeAggregation.put("category", "user");
                 }
                 
-                exchange.getIn().setHeader("streamCorrelationContext", correlationContext.toString());
+                exchange.getIn().setBody(realtimeAggregation);
                 
-                // Store correlation for real-time saga tracking
-                exchange.getIn().setHeader("correlationTimestamp", LocalDateTime.now());
-                
-                log.info("🔗 Stream correlation: {}", correlationContext.toString());
+                log.info("📊 Real-time aggregation: {} - {}", 
+                        eventType, realtimeAggregation.get("category"));
             })
             
-            // Store correlation in fast lookup cache
-            .to("redis:stream-correlations?command=SETEX&keyPrefix=stream-corr&ttl=3600")
-            
-            .log("✅ Stream correlation completed");
+            .to("direct:aggregation-stream-publisher")
+            .log("✅ Real-time aggregation completed");
 
         /**
-         * Route 9: Streaming Dead Letter Channel
-         * Purpose: Handle streaming processing failures
+         * Route 6: Streaming Analytics Processor
+         */
+        from("direct:streaming-analytics-processor")
+            .routeId("streaming-analytics-processor")
+            .description("Streaming Pattern: Streaming analytics calculations")
+            .log("🧮 Processing streaming analytics calculations")
+            
+            .process(exchange -> {
+                String eventType = exchange.getIn().getHeader("eventType", String.class);
+                LocalDateTime timestamp = LocalDateTime.now();
+                
+                // Calculate streaming analytics
+                Map<String, Object> streamingAnalytics = new HashMap<>();
+                streamingAnalytics.put("eventType", eventType);
+                streamingAnalytics.put("calculationTimestamp", timestamp);
+                
+                // Performance metrics
+                long totalEvents = getRealtimeCount("events.total");
+                streamingAnalytics.put("totalEvents", totalEvents);
+                streamingAnalytics.put("processingThroughput", calculateThroughput());
+                streamingAnalytics.put("systemLoad", calculateSystemLoad());
+                
+                // Business metrics
+                if (eventType.contains("ORDER")) {
+                    streamingAnalytics.put("orderVelocity", calculateOrderVelocity());
+                    streamingAnalytics.put("revenueRate", calculateRevenueRate());
+                }
+                
+                exchange.getIn().setBody(streamingAnalytics);
+                
+                log.info("🧮 Streaming analytics: {} - Throughput: {}", 
+                        eventType, streamingAnalytics.get("processingThroughput"));
+            })
+            
+            .to("direct:analytics-stream-publisher")
+            .log("✅ Streaming analytics processing completed");
+
+        // Specialized Dashboard Streamers
+        from("direct:order-dashboard-streamer")
+            .routeId("order-dashboard-streamer")
+            .description("Streaming: Order dashboard streaming")
+            .log("🛒 Streaming order data to dashboard")
+            .process(exchange -> {
+                Map<String, Object> orderDashboard = new HashMap<>();
+                orderDashboard.put("category", "order");
+                orderDashboard.put("liveOrderCount", getRealtimeCount("events.order_"));
+                orderDashboard.put("updateTimestamp", LocalDateTime.now());
+                exchange.getIn().setBody(orderDashboard);
+            })
+            .log("✅ Order dashboard streaming completed");
+
+        from("direct:user-dashboard-streamer")
+            .routeId("user-dashboard-streamer")
+            .description("Streaming: User dashboard streaming")
+            .log("👤 Streaming user data to dashboard")
+            .process(exchange -> {
+                Map<String, Object> userDashboard = new HashMap<>();
+                userDashboard.put("category", "user");
+                userDashboard.put("liveUserActivity", getRealtimeCount("events.user_"));
+                userDashboard.put("updateTimestamp", LocalDateTime.now());
+                exchange.getIn().setBody(userDashboard);
+            })
+            .log("✅ User dashboard streaming completed");
+
+        from("direct:generic-dashboard-streamer")
+            .routeId("generic-dashboard-streamer")
+            .description("Streaming: Generic dashboard streaming")
+            .log("🔧 Streaming generic data to dashboard")
+            .log("✅ Generic dashboard streaming completed");
+
+        // Stream Publishers
+        from("direct:aggregation-stream-publisher")
+            .routeId("aggregation-stream-publisher")
+            .description("Streaming: Publish aggregation streams")
+            .log("📡 Publishing aggregation stream")
+            .to("rabbitmq:aggregation-stream?exchangeType=topic&routingKey=analytics.aggregation")
+            .log("✅ Aggregation stream published");
+
+        from("direct:analytics-stream-publisher")
+            .routeId("analytics-stream-publisher")
+            .description("Streaming: Publish analytics streams")
+            .log("📡 Publishing analytics stream")
+            .to("rabbitmq:analytics-stream?exchangeType=topic&routingKey=analytics.streaming")
+            .log("✅ Analytics stream published");
+
+        from("direct:window-analytics-aggregator")
+            .routeId("window-analytics-aggregator")
+            .description("Streaming: Window analytics aggregation")
+            .log("📊 Processing window analytics aggregation")
+            .log("✅ Window analytics aggregation completed");
+
+        /**
+         * Timer-based Stream Processing (Every 30 seconds)
+         */
+        from("timer:streaming-metrics?period=30000")
+            .routeId("streaming-metrics-timer")
+            .description("Streaming Pattern: Periodic metrics streaming")
+            .log("⏱️ Publishing periodic streaming metrics")
+            
+            .process(exchange -> {
+                Map<String, Object> periodicMetrics = new HashMap<>();
+                periodicMetrics.put("timestamp", LocalDateTime.now());
+                periodicMetrics.put("totalEvents", getRealtimeCount("events.total"));
+                periodicMetrics.put("systemThroughput", calculateThroughput());
+                periodicMetrics.put("activeStreams", realtimeCounters.size());
+                
+                exchange.getIn().setBody(periodicMetrics);
+                
+                log.info("⏱️ Periodic metrics: {} total events, {} streams active", 
+                        periodicMetrics.get("totalEvents"), periodicMetrics.get("activeStreams"));
+            })
+            
+            .to("direct:live-dashboard-streamer")
+            .log("✅ Periodic streaming metrics published");
+
+        /**
+         * Dead Letter Channel
          */
         from("direct:streaming-dead-letter")
             .routeId("streaming-dead-letter")
             .description("Streaming Pattern: Dead letter channel")
             .log(LoggingLevel.ERROR, "💀 Streaming processing failed: ${exception.message}")
-            
             .process(exchange -> {
-                Exception exception = exchange.getProperty(Exchange.EXCEPTION_CAUGHT, Exception.class);
-                String eventType = exchange.getIn().getHeader("eventType", String.class);
-                Long streamEventId = exchange.getIn().getHeader("streamEventId", Long.class);
-                
-                log.error("💀 Streaming failure - Event: {} (#{}) Error: {}", 
-                         eventType, streamEventId, 
-                         exception != null ? exception.getMessage() : "Unknown error");
-                
-                // Track streaming failures
-                exchange.getIn().setHeader("streamingFailure", true);
-                exchange.getIn().setHeader("failureReason", 
-                    exception != null ? exception.getMessage() : "Unknown error");
+                String failureId = UUID.randomUUID().toString();
+                exchange.getIn().setHeader("failureId", failureId);
                 exchange.getIn().setHeader("failureTimestamp", LocalDateTime.now());
+                log.error("💀 Streaming failure logged: {}", failureId);
             })
-            
-            .to("rabbitmq:analytics.streaming.failed?routingKey=streaming.failed")
-            .log("💾 Failed streaming event stored for investigation");
-
-        // Window aggregation processors (mock implementations)
-        from("direct:update-1min-window")
-            .routeId("update-1min-window")
-            .log("⏱️ Mock: 1-minute window update - ${header.aggKey1Min}");
-            
-        from("direct:update-5min-window")
-            .routeId("update-5min-window")
-            .log("⏱️ Mock: 5-minute window update - ${header.aggKey5Min}");
-            
-        from("direct:update-15min-window")
-            .routeId("update-15min-window")
-            .log("⏱️ Mock: 15-minute window update - ${header.aggKey15Min}");
-            
-        from("direct:update-1hour-window")
-            .routeId("update-1hour-window")
-            .log("⏱️ Mock: 1-hour window update - ${header.aggKey1Hour}");
-
-        // Event type processors (mock implementations)
-        from("direct:order-stream-processor")
-            .routeId("order-stream-processor")
-            .log("🛒 Mock: Order stream processor - ${header.eventType}");
-            
-        from("direct:user-stream-processor")
-            .routeId("user-stream-processor")
-            .log("👤 Mock: User stream processor - ${header.eventType}");
-            
-        from("direct:notification-stream-processor")
-            .routeId("notification-stream-processor")
-            .log("🔔 Mock: Notification stream processor - ${header.eventType}");
-            
-        from("direct:generic-stream-processor")
-            .routeId("generic-stream-processor")
-            .log("🔧 Mock: Generic stream processor - ${header.eventType}");
-
-        // High-frequency processors (mock implementations)
-        from("direct:detailed-high-frequency-processing")
-            .routeId("detailed-high-frequency-processing")
-            .log("⚡ Mock: Detailed high-frequency processing - ${header.eventType}");
-            
-        from("direct:lightweight-high-frequency-processing")
-            .routeId("lightweight-high-frequency-processing")
-            .log("⚡ Mock: Lightweight high-frequency processing - ${header.eventType}");
-
-        // Dashboard update (mock implementation)
-        from("direct:websocket-dashboard-update")
-            .routeId("websocket-dashboard-update")
-            .log("📡 Mock: WebSocket dashboard update - ${header.dashboardUpdateType}");
+            .log("💾 Streaming failure logged for analysis");
     }
 
-    /**
-     * Calculate current processing rate
-     */
-    private double calculateProcessingRate() {
-        // Mock calculation - in real implementation, track over time window
-        long processed = processedEventsCounter.get();
-        return Math.min(processed * 0.1, 1250.0); // Cap at 1250 events/sec
+    // Helper methods for real-time metrics
+    private void updateRealtimeCounter(String key) {
+        realtimeCounters.computeIfAbsent(key, k -> new AtomicLong(0)).incrementAndGet();
+    }
+
+    private long getRealtimeCount(String key) {
+        return realtimeCounters.getOrDefault(key, new AtomicLong(0)).get();
+    }
+
+    private double calculateThroughput() {
+        return getRealtimeCount("events.total") / 60.0; // events per second (simplified)
+    }
+
+    private double calculateSystemLoad() {
+        return Math.min(calculateThroughput() / 100.0, 1.0); // Simple load calculation
+    }
+
+    private double calculateOrderVelocity() {
+        return getRealtimeCount("events.order_") / 3600.0; // orders per hour
+    }
+
+    private double calculateRevenueRate() {
+        return calculateOrderVelocity() * 25.0; // Assume $25 average order
     }
 } 

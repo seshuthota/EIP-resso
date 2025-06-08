@@ -1,0 +1,32 @@
+# User Service Configuration
+spring:
+  application:
+    name: user-service
+  
+  datasource:
+    url: jdbc:postgresql://localhost:5432/user_service_test
+    username: user_service_user
+    password: user_test_password
+
+# JWT Configuration
+jwt:
+  secret: test-jwt-secret-key-for-user-service
+  expiration: 86400000
+  refresh-expiration: 604800000
+
+# Authentication settings
+auth:
+  bcrypt:
+    strength: 10
+  max-login-attempts: 5
+  lockout-duration: 300000
+
+# User service specific settings
+user-service:
+  registration:
+    enabled: true
+    email-verification: true
+  profile:
+    enrichment:
+      enabled: true
+      geolocation: true 
