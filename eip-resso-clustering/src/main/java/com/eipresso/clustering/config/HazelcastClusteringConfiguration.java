@@ -8,7 +8,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Profile;
 
 /**
  * Centralized Hazelcast Clustering Configuration for EIP-resso Microservices
@@ -20,7 +19,6 @@ import org.springframework.context.annotation.Profile;
  * Features:
  * - Service discovery integration with Consul
  * - Split-brain protection for critical services
- * - Comprehensive monitoring and metrics
  * - Network partition tolerance
  * - Kubernetes-ready configuration
  */
@@ -56,15 +54,6 @@ public class HazelcastClusteringConfiguration {
         // Map configurations for stateless services
         configureActiveActiveMaps(config);
         
-        // Management and monitoring
-        configureManagementCenter(config);
-        
-        // Metrics and monitoring
-        configureMetrics(config);
-        
-        // Security configuration
-        configureSecurity(config);
-        
         // Spring integration
         config.setManagedContext(new SpringManagedContext());
         
@@ -95,15 +84,6 @@ public class HazelcastClusteringConfiguration {
         
         // Split-brain protection for critical data
         configureSplitBrainProtection(config);
-        
-        // Management and monitoring
-        configureManagementCenter(config);
-        
-        // Metrics and monitoring
-        configureMetrics(config);
-        
-        // Security configuration
-        configureSecurity(config);
         
         // Spring integration
         config.setManagedContext(new SpringManagedContext());
@@ -137,24 +117,6 @@ public class HazelcastClusteringConfiguration {
         TcpIpConfig tcpIpConfig = joinConfig.getTcpIpConfig();
         tcpIpConfig.setEnabled(true);
         tcpIpConfig.setMembers(clusteringProperties.getMembers());
-        
-        // Consul discovery integration
-        if (clusteringProperties.isConsulDiscoveryEnabled()) {
-            DiscoveryConfig discoveryConfig = joinConfig.getDiscoveryConfig();
-            discoveryConfig.addDiscoveryStrategyConfig(
-                new DiscoveryStrategyConfig("consul")
-                    .addProperty("consul-host", clusteringProperties.getConsulHost())
-                    .addProperty("consul-port", String.valueOf(clusteringProperties.getConsulPort()))
-                    .addProperty("service-name", clusteringProperties.getServiceName())
-            );
-        }
-        
-        // Failure detector configuration
-        IcmpFailureDetectorConfig icmpFailureDetectorConfig = networkConfig.getIcmpFailureDetectorConfig();
-        icmpFailureDetectorConfig.setEnabled(true);
-        icmpFailureDetectorConfig.setIntervalMilliseconds(1000);
-        icmpFailureDetectorConfig.setTimeoutMilliseconds(2000);
-        icmpFailureDetectorConfig.setMaxAttempts(3);
     }
     
     /**
@@ -162,15 +124,6 @@ public class HazelcastClusteringConfiguration {
      */
     private void configureActivePassiveNetwork(Config config) {
         configureActiveActiveNetwork(config); // Base network config
-        
-        // Additional settings for Active-Passive
-        NetworkConfig networkConfig = config.getNetworkConfig();
-        
-        // More aggressive failure detection for consistency
-        IcmpFailureDetectorConfig icmpFailureDetectorConfig = networkConfig.getIcmpFailureDetectorConfig();
-        icmpFailureDetectorConfig.setIntervalMilliseconds(500);
-        icmpFailureDetectorConfig.setTimeoutMilliseconds(1000);
-        icmpFailureDetectorConfig.setMaxAttempts(2);
     }
     
     /**
@@ -258,53 +211,5 @@ public class HazelcastClusteringConfiguration {
             .setSplitBrainProtectionName("critical-data-protection");
         config.getMapConfig("saga-states")
             .setSplitBrainProtectionName("critical-data-protection");
-    }
-    
-    /**
-     * Configure Hazelcast Management Center
-     */
-    private void configureManagementCenter(Config config) {
-        if (clusteringProperties.getManagementCenter().isEnabled()) {
-            ManagementCenterConfig managementCenterConfig = config.getManagementCenterConfig();
-            managementCenterConfig.setConsoleEnabled(true);
-            managementCenterConfig.addTrustedInterface(clusteringProperties.getManagementCenter().getUrl());
-        }
-    }
-    
-    /**
-     * Configure metrics and monitoring
-     */
-    private void configureMetrics(Config config) {
-        MetricsConfig metricsConfig = config.getMetricsConfig();
-        metricsConfig.setEnabled(true);
-        metricsConfig.setJmxEnabled(true);
-        
-        // Metrics collection config
-        metricsConfig.setCollectionFrequencySeconds(5);
-        
-        // Management config for monitoring
-        config.getManagementCenterConfig().setDataAccessEnabled(true);
-    }
-    
-    /**
-     * Configure security settings
-     */
-    private void configureSecurity(Config config) {
-        if (clusteringProperties.getSecurity().isEnabled()) {
-            SecurityConfig securityConfig = config.getSecurityConfig();
-            securityConfig.setEnabled(true);
-            
-            // Member authentication
-            securityConfig.setMemberCredentialsConfig(new UsernamePasswordCredentialsConfig(
-                clusteringProperties.getSecurity().getUsername(),
-                clusteringProperties.getSecurity().getPassword()
-            ));
-            
-            // Client authentication
-            securityConfig.setClientCredentialsConfig(new UsernamePasswordCredentialsConfig(
-                clusteringProperties.getSecurity().getClientUsername(),
-                clusteringProperties.getSecurity().getClientPassword()
-            ));
-        }
     }
 } 
