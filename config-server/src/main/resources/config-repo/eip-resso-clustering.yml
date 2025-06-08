@@ -1,0 +1,204 @@
+# EIP-resso Centralized Clustering Configuration
+# This configuration is inherited by all microservices and can be overridden per service
+
+# Common Hazelcast Clustering Configuration
+eipresso:
+  clustering:
+    # Default strategy (can be overridden per service)
+    strategy: active-active
+    
+    # Cluster identification
+    cluster-name: eip-resso-production-cluster
+    
+    # Network configuration
+    port: 5701
+    multicast-enabled: false
+    consul-discovery-enabled: true
+    consul-host: localhost
+    consul-port: 8500
+    
+    # Default member addresses for TCP/IP discovery
+    members:
+      - "127.0.0.1:5701"
+      - "127.0.0.1:5702" 
+      - "127.0.0.1:5703"
+      - "127.0.0.1:5704"
+      - "127.0.0.1:5705"
+      - "127.0.0.1:5706"
+      - "127.0.0.1:5707"
+      - "127.0.0.1:5708"
+      - "127.0.0.1:5709"
+      - "127.0.0.1:5710"
+    
+    # Split-brain protection
+    min-cluster-size: 2
+    
+    # Management Center configuration
+    management-center:
+      enabled: true
+      url: "http://localhost:8080/hazelcast-mancenter"
+    
+    # Security configuration (disabled for development)
+    security:
+      enabled: false
+      username: eip-resso-cluster
+      password: cluster-secret-change-in-production
+      client-username: eip-resso-client
+      client-password: client-secret-change-in-production
+
+# Service-Specific Overrides
+# These configurations override the defaults for specific services
+
+---
+# User Management Service - Active-Active Configuration
+spring:
+  config:
+    activate:
+      on-profile: user-service
+
+eipresso:
+  clustering:
+    strategy: active-active
+    instance-name: "user-service-${server.port}"
+    service-name: user-service
+    port: 5703
+    cluster-name: eip-resso-user-cluster
+
+---
+# Product Catalog Service - Active-Active Configuration  
+spring:
+  config:
+    activate:
+      on-profile: product-catalog-service
+
+eipresso:
+  clustering:
+    strategy: active-active
+    instance-name: "product-catalog-${server.port}"
+    service-name: product-catalog-service
+    port: 5704
+    cluster-name: eip-resso-product-cluster
+
+---
+# Order Management Service - Active-Passive Configuration
+spring:
+  config:
+    activate:
+      on-profile: order-management-service
+
+eipresso:
+  clustering:
+    strategy: active-passive
+    instance-name: "order-management-${server.port}"
+    service-name: order-management-service
+    port: 5705
+    cluster-name: eip-resso-order-cluster
+    min-cluster-size: 2
+
+---
+# Payment Service - Active-Passive Configuration
+spring:
+  config:
+    activate:
+      on-profile: payment-service
+
+eipresso:
+  clustering:
+    strategy: active-passive
+    instance-name: "payment-${server.port}"
+    service-name: payment-service
+    port: 5706
+    cluster-name: eip-resso-payment-cluster
+    min-cluster-size: 2
+
+---
+# Notification Service - Active-Active Configuration
+spring:
+  config:
+    activate:
+      on-profile: notification-service
+
+eipresso:
+  clustering:
+    strategy: active-active
+    instance-name: "notification-${server.port}"
+    service-name: notification-service
+    port: 5707
+    cluster-name: eip-resso-notification-cluster
+
+---
+# Analytics Service - Active-Active Configuration
+spring:
+  config:
+    activate:
+      on-profile: analytics-service
+
+eipresso:
+  clustering:
+    strategy: active-active
+    instance-name: "analytics-${server.port}"
+    service-name: analytics-service
+    port: 5708
+    cluster-name: eip-resso-analytics-cluster
+
+---
+# Order Orchestration Service - Active-Passive Configuration
+spring:
+  config:
+    activate:
+      on-profile: order-orchestration-service
+
+eipresso:
+  clustering:
+    strategy: active-passive
+    instance-name: "order-orchestration-${server.port}"
+    service-name: order-orchestration-service
+    port: 5709
+    cluster-name: eip-resso-orchestration-cluster
+    min-cluster-size: 2
+
+# Production Environment Overrides
+---
+spring:
+  config:
+    activate:
+      on-profile: production
+
+eipresso:
+  clustering:
+    # Production-specific settings
+    management-center:
+      enabled: true
+      url: "${HAZELCAST_MANAGEMENT_CENTER_URL:http://hazelcast-mancenter:8080}"
+    
+    security:
+      enabled: true
+      username: "${HAZELCAST_CLUSTER_USER:eip-resso-cluster}"
+      password: "${HAZELCAST_CLUSTER_PASSWORD}"
+      client-username: "${HAZELCAST_CLIENT_USER:eip-resso-client}"
+      client-password: "${HAZELCAST_CLIENT_PASSWORD}"
+    
+    consul-host: "${CONSUL_HOST:consul}"
+    consul-port: "${CONSUL_PORT:8500}"
+    
+    # Production member discovery via environment variables
+    members: "${HAZELCAST_MEMBERS:127.0.0.1:5701,127.0.0.1:5702,127.0.0.1:5703}"
+
+# Kubernetes Environment Overrides
+---
+spring:
+  config:
+    activate:
+      on-profile: kubernetes
+
+eipresso:
+  clustering:
+    # Kubernetes-specific discovery
+    consul-discovery-enabled: false
+    
+    # Kubernetes service discovery will be handled by hazelcast-kubernetes plugin
+    members: [] # Empty for K8s discovery
+    
+    management-center:
+      enabled: true
+      url: "http://hazelcast-mancenter.eip-resso.svc.cluster.local:8080" 

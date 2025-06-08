@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    
+    <parent>
+        <groupId>com.eipresso</groupId>
+        <artifactId>eip-resso-parent</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+    
+    <artifactId>eip-resso-clustering</artifactId>
+    <name>EIP-resso Clustering Configuration</name>
+    <description>Centralized Hazelcast clustering configuration for all EIP-resso microservices</description>
+    
+    <dependencies>
+        <!-- Spring Boot Starters -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
+        
+        <!-- Hazelcast -->
+        <dependency>
+            <groupId>com.hazelcast</groupId>
+            <artifactId>hazelcast-spring</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.hazelcast</groupId>
+            <artifactId>hazelcast</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.hazelcast</groupId>
+            <artifactId>hazelcast-kubernetes</artifactId>
+        </dependency>
+        
+        <!-- Spring Cloud -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-consul-discovery</artifactId>
+        </dependency>
+        
+        <!-- Metrics and Monitoring -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+        
+        <!-- Testing -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.hazelcast</groupId>
+            <artifactId>hazelcast-testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+    
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <skip>true</skip>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project> 

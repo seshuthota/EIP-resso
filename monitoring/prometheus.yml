@@ -1,0 +1,366 @@
+# Prometheus Configuration for EIP-resso Microservices Monitoring
+# Comprehensive monitoring of all services, clustering, and infrastructure
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'eip-resso-production'
+    environment: 'development'
+
+rule_files:
+  - "rules/*.yml"
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093
+
+scrape_configs:
+  # =============================================================================
+  # Infrastructure Monitoring
+  # =============================================================================
+  
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    metrics_path: /metrics
+    scrape_interval: 15s
+
+  # Consul Cluster Monitoring
+  - job_name: 'consul-cluster'
+    static_configs:
+      - targets: 
+        - '172.20.1.41:8500'
+        - '172.20.1.42:8500'
+        - '172.20.1.43:8500'
+    metrics_path: /v1/agent/metrics
+    params:
+      format: ['prometheus']
+    scrape_interval: 30s
+
+  # PostgreSQL Monitoring (using postgres_exporter)
+  - job_name: 'postgresql'
+    static_configs:
+      - targets: ['172.20.1.10:9187']
+    scrape_interval: 30s
+
+  # Redis Cluster Monitoring
+  - job_name: 'redis-cluster'
+    static_configs:
+      - targets:
+        - '172.20.1.21:9121'
+        - '172.20.1.22:9121'
+        - '172.20.1.23:9121'
+    scrape_interval: 30s
+
+  # Elasticsearch Cluster Monitoring
+  - job_name: 'elasticsearch-cluster'
+    static_configs:
+      - targets:
+        - '172.20.1.51:9114'
+        - '172.20.1.52:9114'
+        - '172.20.1.53:9114'
+    scrape_interval: 30s
+
+  # RabbitMQ Cluster Monitoring
+  - job_name: 'rabbitmq-cluster'
+    static_configs:
+      - targets:
+        - '172.20.1.31:15692'
+        - '172.20.1.32:15692'
+    scrape_interval: 30s
+
+  # =============================================================================
+  # EIP-resso Microservices Monitoring
+  # =============================================================================
+
+  # Config Server
+  - job_name: 'config-server'
+    static_configs:
+      - targets: ['172.20.2.100:8888']
+    metrics_path: /actuator/prometheus
+    scrape_interval: 15s
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'config-server'
+
+  # User Service Cluster (Active-Active)
+  - job_name: 'user-service-cluster'
+    static_configs:
+      - targets: 
+        - '172.20.2.11:8081'
+        - '172.20.2.12:8081'
+    metrics_path: /actuator/prometheus
+    scrape_interval: 15s
+    relabel_configs:
+      - source_labels: [__address__]
+        regex: '172\.20\.2\.11:8081'
+        target_label: instance
+        replacement: 'user-service-1'
+      - source_labels: [__address__]
+        regex: '172\.20\.2\.12:8081'
+        target_label: instance
+        replacement: 'user-service-2'
+      - target_label: service
+        replacement: 'user-service'
+      - target_label: cluster_strategy
+        replacement: 'active-active'
+
+  # Product Catalog Service Cluster (Active-Active)
+  - job_name: 'product-catalog-cluster'
+    static_configs:
+      - targets:
+        - '172.20.2.21:8082'
+        - '172.20.2.22:8082'
+    metrics_path: /actuator/prometheus
+    scrape_interval: 15s
+    relabel_configs:
+      - source_labels: [__address__]
+        regex: '172\.20\.2\.21:8082'
+        target_label: instance
+        replacement: 'product-catalog-1'
+      - source_labels: [__address__]
+        regex: '172\.20\.2\.22:8082'
+        target_label: instance
+        replacement: 'product-catalog-2'
+      - target_label: service
+        replacement: 'product-catalog'
+      - target_label: cluster_strategy
+        replacement: 'active-active'
+
+  # Order Management Service Cluster (Active-Passive)
+  - job_name: 'order-management-cluster'
+    static_configs:
+      - targets:
+        - '172.20.2.31:8083'
+        - '172.20.2.32:8083'
+    metrics_path: /actuator/prometheus
+    scrape_interval: 15s
+    relabel_configs:
+      - source_labels: [__address__]
+        regex: '172\.20\.2\.31:8083'
+        target_label: instance
+        replacement: 'order-management-primary'
+      - source_labels: [__address__]
+        regex: '172\.20\.2\.32:8083'
+        target_label: instance
+        replacement: 'order-management-backup'
+      - target_label: service
+        replacement: 'order-management'
+      - target_label: cluster_strategy
+        replacement: 'active-passive'
+
+  # Payment Service Cluster (Active-Passive)
+  - job_name: 'payment-service-cluster'
+    static_configs:
+      - targets:
+        - '172.20.2.41:8084'
+        - '172.20.2.42:8084'
+    metrics_path: /actuator/prometheus
+    scrape_interval: 15s
+    relabel_configs:
+      - source_labels: [__address__]
+        regex: '172\.20\.2\.41:8084'
+        target_label: instance
+        replacement: 'payment-service-primary'
+      - source_labels: [__address__]
+        regex: '172\.20\.2\.42:8084'
+        target_label: instance
+        replacement: 'payment-service-backup'
+      - target_label: service
+        replacement: 'payment-service'
+      - target_label: cluster_strategy
+        replacement: 'active-passive'
+
+  # Notification Service Cluster (Active-Active)
+  - job_name: 'notification-service-cluster'
+    static_configs:
+      - targets:
+        - '172.20.2.51:8086'
+        - '172.20.2.52:8086'
+        - '172.20.2.53:8086'
+    metrics_path: /actuator/prometheus
+    scrape_interval: 15s
+    relabel_configs:
+      - source_labels: [__address__]
+        regex: '172\.20\.2\.51:8086'
+        target_label: instance
+        replacement: 'notification-service-1'
+      - source_labels: [__address__]
+        regex: '172\.20\.2\.52:8086'
+        target_label: instance
+        replacement: 'notification-service-2'
+      - source_labels: [__address__]
+        regex: '172\.20\.2\.53:8086'
+        target_label: instance
+        replacement: 'notification-service-3'
+      - target_label: service
+        replacement: 'notification-service'
+      - target_label: cluster_strategy
+        replacement: 'active-active'
+
+  # Analytics Service Cluster (Active-Active)
+  - job_name: 'analytics-service-cluster'
+    static_configs:
+      - targets:
+        - '172.20.2.61:8087'
+        - '172.20.2.62:8087'
+    metrics_path: /actuator/prometheus
+    scrape_interval: 15s
+    relabel_configs:
+      - source_labels: [__address__]
+        regex: '172\.20\.2\.61:8087'
+        target_label: instance
+        replacement: 'analytics-service-1'
+      - source_labels: [__address__]
+        regex: '172\.20\.2\.62:8087'
+        target_label: instance
+        replacement: 'analytics-service-2'
+      - target_label: service
+        replacement: 'analytics-service'
+      - target_label: cluster_strategy
+        replacement: 'active-active'
+
+  # Order Orchestration Service Cluster (Active-Passive)
+  - job_name: 'order-orchestration-cluster'
+    static_configs:
+      - targets:
+        - '172.20.2.71:8089'
+        - '172.20.2.72:8089'
+    metrics_path: /actuator/prometheus
+    scrape_interval: 15s
+    relabel_configs:
+      - source_labels: [__address__]
+        regex: '172\.20\.2\.71:8089'
+        target_label: instance
+        replacement: 'order-orchestration-primary'
+      - source_labels: [__address__]
+        regex: '172\.20\.2\.72:8089'
+        target_label: instance
+        replacement: 'order-orchestration-backup'
+      - target_label: service
+        replacement: 'order-orchestration'
+      - target_label: cluster_strategy
+        replacement: 'active-passive'
+
+  # =============================================================================
+  # Hazelcast Cluster Monitoring
+  # =============================================================================
+
+  # Hazelcast Management Center
+  - job_name: 'hazelcast-management-center'
+    static_configs:
+      - targets: ['172.20.1.60:8080']
+    metrics_path: /metrics
+    scrape_interval: 30s
+
+  # Hazelcast Clusters (JMX metrics from each service)
+  - job_name: 'hazelcast-clusters'
+    static_configs:
+      - targets:
+        # User Service Hazelcast
+        - '172.20.2.11:5703'
+        - '172.20.2.12:5703'
+        # Product Catalog Hazelcast
+        - '172.20.2.21:5704'
+        - '172.20.2.22:5704'
+        # Order Management Hazelcast
+        - '172.20.2.31:5705'
+        - '172.20.2.32:5705'
+        # Payment Service Hazelcast
+        - '172.20.2.41:5706'
+        - '172.20.2.42:5706'
+        # Notification Service Hazelcast
+        - '172.20.2.51:5707'
+        - '172.20.2.52:5707'
+        - '172.20.2.53:5707'
+        # Analytics Service Hazelcast
+        - '172.20.2.61:5708'
+        - '172.20.2.62:5708'
+        # Order Orchestration Hazelcast
+        - '172.20.2.71:5709'
+        - '172.20.2.72:5709'
+    metrics_path: /metrics
+    scrape_interval: 30s
+    relabel_configs:
+      - source_labels: [__address__]
+        regex: '172\.20\.2\.(11|12):5703'
+        target_label: service
+        replacement: 'user-service-hazelcast'
+      - source_labels: [__address__]
+        regex: '172\.20\.2\.(21|22):5704'
+        target_label: service
+        replacement: 'product-catalog-hazelcast'
+      - source_labels: [__address__]
+        regex: '172\.20\.2\.(31|32):5705'
+        target_label: service
+        replacement: 'order-management-hazelcast'
+      - source_labels: [__address__]
+        regex: '172\.20\.2\.(41|42):5706'
+        target_label: service
+        replacement: 'payment-service-hazelcast'
+      - source_labels: [__address__]
+        regex: '172\.20\.2\.(51|52|53):5707'
+        target_label: service
+        replacement: 'notification-service-hazelcast'
+      - source_labels: [__address__]
+        regex: '172\.20\.2\.(61|62):5708'
+        target_label: service
+        replacement: 'analytics-service-hazelcast'
+      - source_labels: [__address__]
+        regex: '172\.20\.2\.(71|72):5709'
+        target_label: service
+        replacement: 'order-orchestration-hazelcast'
+
+  # =============================================================================
+  # Load Balancer Monitoring
+  # =============================================================================
+
+  # HAProxy Statistics
+  - job_name: 'haproxy-user-service'
+    static_configs:
+      - targets: ['172.20.1.71:8404']
+    metrics_path: /metrics
+    scrape_interval: 30s
+
+  - job_name: 'haproxy-product-catalog'
+    static_configs:
+      - targets: ['172.20.1.72:8404']
+    metrics_path: /metrics
+    scrape_interval: 30s
+
+  # =============================================================================
+  # Apache Camel Metrics (JMX-based)
+  # =============================================================================
+
+  # Camel Context Metrics from all services
+  - job_name: 'apache-camel-metrics'
+    static_configs:
+      - targets:
+        # All service instances for Camel metrics
+        - '172.20.2.11:8081'  # user-service-1
+        - '172.20.2.12:8081'  # user-service-2
+        - '172.20.2.21:8082'  # product-catalog-1
+        - '172.20.2.22:8082'  # product-catalog-2
+        - '172.20.2.31:8083'  # order-management-primary
+        - '172.20.2.32:8083'  # order-management-backup
+    metrics_path: /actuator/prometheus
+    params:
+      'match[]':
+        - 'camel_*'
+        - 'eip_pattern_*'
+        - 'route_*'
+    scrape_interval: 30s
+    relabel_configs:
+      - source_labels: [__name__]
+        regex: 'camel_.*'
+        target_label: metric_type
+        replacement: 'camel'
+      - source_labels: [__name__]
+        regex: 'eip_pattern_.*'
+        target_label: metric_type
+        replacement: 'eip-pattern' 

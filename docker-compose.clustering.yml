@@ -1,0 +1,451 @@
+version: '3.8'
+
+# EIP-resso Clustering Test Environment
+# This Docker Compose file creates multiple instances of each service to test clustering behavior
+# Includes load balancers, monitoring, and comprehensive networking
+
+networks:
+  eip-resso-cluster:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  postgres-cluster-data:
+  redis-cluster-data:
+  elasticsearch-cluster-data:
+  prometheus-data:
+  grafana-data:
+
+services:
+  # =============================================================================
+  # Infrastructure Services
+  # =============================================================================
+  
+  # PostgreSQL with master-slave replication
+  postgres-master:
+    image: postgres:14
+    container_name: eip-resso-postgres-master
+    environment:
+      POSTGRES_DB: eip_resso
+      POSTGRES_USER: eip_resso_user
+      POSTGRES_PASSWORD: eip_resso_pass
+      POSTGRES_REPLICATION_USER: replicator
+      POSTGRES_REPLICATION_PASSWORD: replicator_pass
+    command: |
+      postgres -c wal_level=hot_standby
+               -c max_wal_senders=3
+               -c wal_keep_segments=8
+               -c hot_standby=on
+               -c shared_preload_libraries=pg_stat_statements
+               -c log_statement=all
+    volumes:
+      - postgres-cluster-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      eip-resso-cluster:
+        ipv4_address: 172.20.1.10
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eip_resso_user -d eip_resso"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cluster (3 masters)
+  redis-cluster-1:
+    image: redis:7-alpine
+    container_name: eip-resso-redis-1
+    command: redis-server --cluster-enabled yes --cluster-config-file nodes.conf --cluster-node-timeout 5000 --appendonly yes --port 7001
+    ports:
+      - "7001:7001"
+    networks:
+      eip-resso-cluster:
+        ipv4_address: 172.20.1.21
+
+  redis-cluster-2:
+    image: redis:7-alpine
+    container_name: eip-resso-redis-2
+    command: redis-server --cluster-enabled yes --cluster-config-file nodes.conf --cluster-node-timeout 5000 --appendonly yes --port 7002
+    ports:
+      - "7002:7002"
+    networks:
+      eip-resso-cluster:
+        ipv4_address: 172.20.1.22
+
+  redis-cluster-3:
+    image: redis:7-alpine
+    container_name: eip-resso-redis-3
+    command: redis-server --cluster-enabled yes --cluster-config-file nodes.conf --cluster-node-timeout 5000 --appendonly yes --port 7003
+    ports:
+      - "7003:7003"
+    networks:
+      eip-resso-cluster:
+        ipv4_address: 172.20.1.23
+
+  # RabbitMQ Cluster (3 nodes)
+  rabbitmq-1:
+    image: rabbitmq:3-management
+    container_name: eip-resso-rabbitmq-1
+    environment:
+      RABBITMQ_ERLANG_COOKIE: "eip-resso-secret"
+      RABBITMQ_DEFAULT_USER: eip_resso_user
+      RABBITMQ_DEFAULT_PASS: eip_resso_pass
+      RABBITMQ_NODENAME: rabbit@rabbitmq-1
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      eip-resso-cluster:
+        ipv4_address: 172.20.1.31
+
+  rabbitmq-2:
+    image: rabbitmq:3-management
+    container_name: eip-resso-rabbitmq-2
+    environment:
+      RABBITMQ_ERLANG_COOKIE: "eip-resso-secret"
+      RABBITMQ_DEFAULT_USER: eip_resso_user
+      RABBITMQ_DEFAULT_PASS: eip_resso_pass
+      RABBITMQ_NODENAME: rabbit@rabbitmq-2
+    depends_on:
+      - rabbitmq-1
+    networks:
+      eip-resso-cluster:
+        ipv4_address: 172.20.1.32
+
+  # Consul Cluster (3 nodes)
+  consul-1:
+    image: consul:latest
+    container_name: eip-resso-consul-1
+    command: agent -server -bootstrap-expect=3 -datacenter=eip-resso -node=consul-1 -bind=172.20.1.41 -client=0.0.0.0 -ui
+    ports:
+      - "8500:8500"
+    networks:
+      eip-resso-cluster:
+        ipv4_address: 172.20.1.41
+
+  consul-2:
+    image: consul:latest
+    container_name: eip-resso-consul-2
+    command: agent -server -retry-join=172.20.1.41 -datacenter=eip-resso -node=consul-2 -bind=172.20.1.42 -client=0.0.0.0
+    depends_on:
+      - consul-1
+    networks:
+      eip-resso-cluster:
+        ipv4_address: 172.20.1.42
+
+  consul-3:
+    image: consul:latest
+    container_name: eip-resso-consul-3
+    command: agent -server -retry-join=172.20.1.41 -datacenter=eip-resso -node=consul-3 -bind=172.20.1.43 -client=0.0.0.0
+    depends_on:
+      - consul-1
+    networks:
+      eip-resso-cluster:
+        ipv4_address: 172.20.1.43
+
+  # Elasticsearch Cluster (3 nodes)
+  elasticsearch-1:
+    image: elasticsearch:8.8.0
+    container_name: eip-resso-elasticsearch-1
+    environment:
+      - node.name=elasticsearch-1
+      - cluster.name=eip-resso-cluster
+      - discovery.seed_hosts=elasticsearch-2,elasticsearch-3
+      - cluster.initial_master_nodes=elasticsearch-1,elasticsearch-2,elasticsearch-3
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    networks:
+      eip-resso-cluster:
+        ipv4_address: 172.20.1.51
+
+  elasticsearch-2:
+    image: elasticsearch:8.8.0
+    container_name: eip-resso-elasticsearch-2
+    environment:
+      - node.name=elasticsearch-2
+      - cluster.name=eip-resso-cluster
+      - discovery.seed_hosts=elasticsearch-1,elasticsearch-3
+      - cluster.initial_master_nodes=elasticsearch-1,elasticsearch-2,elasticsearch-3
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    networks:
+      eip-resso-cluster:
+        ipv4_address: 172.20.1.52
+
+  elasticsearch-3:
+    image: elasticsearch:8.8.0
+    container_name: eip-resso-elasticsearch-3
+    environment:
+      - node.name=elasticsearch-3
+      - cluster.name=eip-resso-cluster
+      - discovery.seed_hosts=elasticsearch-1,elasticsearch-2
+      - cluster.initial_master_nodes=elasticsearch-1,elasticsearch-2,elasticsearch-3
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    networks:
+      eip-resso-cluster:
+        ipv4_address: 172.20.1.53
+
+  # =============================================================================
+  # Monitoring Services
+  # =============================================================================
+
+  # Hazelcast Management Center
+  hazelcast-mancenter:
+    image: hazelcast/management-center:5.3
+    container_name: eip-resso-hazelcast-mancenter
+    ports:
+      - "8080:8080"
+    environment:
+      - MC_DEFAULT_CLUSTER=eip-resso-production-cluster
+      - MC_DEFAULT_CLUSTER_MEMBERS=172.20.2.11:5703,172.20.2.12:5703,172.20.2.21:5704,172.20.2.22:5704
+    networks:
+      eip-resso-cluster:
+        ipv4_address: 172.20.1.60
+
+  # Prometheus for metrics collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: eip-resso-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    networks:
+      eip-resso-cluster:
+        ipv4_address: 172.20.1.61
+
+  # Grafana for dashboards
+  grafana:
+    image: grafana/grafana:latest
+    container_name: eip-resso-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    networks:
+      eip-resso-cluster:
+        ipv4_address: 172.20.1.62
+
+  # =============================================================================
+  # Load Balancers
+  # =============================================================================
+
+  # HAProxy for User Service (Active-Active)
+  user-service-lb:
+    image: haproxy:2.8
+    container_name: eip-resso-user-lb
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./load-balancers/user-service-haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg
+    depends_on:
+      - user-service-1
+      - user-service-2
+    networks:
+      eip-resso-cluster:
+        ipv4_address: 172.20.1.71
+
+  # HAProxy for Product Catalog (Active-Active)
+  product-catalog-lb:
+    image: haproxy:2.8
+    container_name: eip-resso-product-lb
+    ports:
+      - "8082:8082"
+    volumes:
+      - ./load-balancers/product-catalog-haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg
+    depends_on:
+      - product-catalog-1
+      - product-catalog-2
+    networks:
+      eip-resso-cluster:
+        ipv4_address: 172.20.1.72
+
+  # =============================================================================
+  # Microservices Clusters
+  # =============================================================================
+
+  # User Service Cluster (Active-Active)
+  user-service-1:
+    build:
+      context: ./user-service
+      dockerfile: Dockerfile
+    container_name: eip-resso-user-1
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev,user-service
+      - SERVER_PORT=8081
+      - SPRING_CONFIG_IMPORT=optional:configserver:http://config-server:8888
+      - EIPRESSO_CLUSTERING_INSTANCE_NAME=user-service-1
+      - EIPRESSO_CLUSTERING_PORT=5703
+    ports:
+      - "8181:8081"
+      - "5703:5703"
+    depends_on:
+      - postgres-master
+      - consul-1
+      - config-server
+    networks:
+      eip-resso-cluster:
+        ipv4_address: 172.20.2.11
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  user-service-2:
+    build:
+      context: ./user-service
+      dockerfile: Dockerfile
+    container_name: eip-resso-user-2
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev,user-service
+      - SERVER_PORT=8081
+      - SPRING_CONFIG_IMPORT=optional:configserver:http://config-server:8888
+      - EIPRESSO_CLUSTERING_INSTANCE_NAME=user-service-2
+      - EIPRESSO_CLUSTERING_PORT=5703
+    ports:
+      - "8182:8081"
+      - "5713:5703"
+    depends_on:
+      - postgres-master
+      - consul-1
+      - config-server
+      - user-service-1
+    networks:
+      eip-resso-cluster:
+        ipv4_address: 172.20.2.12
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Product Catalog Cluster (Active-Active)
+  product-catalog-1:
+    build:
+      context: ./product-catalog-service
+      dockerfile: Dockerfile
+    container_name: eip-resso-product-1
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev,product-catalog-service
+      - SERVER_PORT=8082
+      - SPRING_CONFIG_IMPORT=optional:configserver:http://config-server:8888
+      - EIPRESSO_CLUSTERING_INSTANCE_NAME=product-catalog-1
+      - EIPRESSO_CLUSTERING_PORT=5704
+    ports:
+      - "8183:8082"
+      - "5704:5704"
+    depends_on:
+      - postgres-master
+      - redis-cluster-1
+      - consul-1
+      - config-server
+    networks:
+      eip-resso-cluster:
+        ipv4_address: 172.20.2.21
+
+  product-catalog-2:
+    build:
+      context: ./product-catalog-service
+      dockerfile: Dockerfile
+    container_name: eip-resso-product-2
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev,product-catalog-service
+      - SERVER_PORT=8082
+      - SPRING_CONFIG_IMPORT=optional:configserver:http://config-server:8888
+      - EIPRESSO_CLUSTERING_INSTANCE_NAME=product-catalog-2
+      - EIPRESSO_CLUSTERING_PORT=5704
+    ports:
+      - "8184:8082"
+      - "5714:5704"
+    depends_on:
+      - postgres-master
+      - redis-cluster-1
+      - consul-1
+      - config-server
+      - product-catalog-1
+    networks:
+      eip-resso-cluster:
+        ipv4_address: 172.20.2.22
+
+  # Order Management Cluster (Active-Passive)
+  order-management-primary:
+    build:
+      context: ./order-management-service
+      dockerfile: Dockerfile
+    container_name: eip-resso-order-primary
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev,order-management-service
+      - SERVER_PORT=8083
+      - SPRING_CONFIG_IMPORT=optional:configserver:http://config-server:8888
+      - EIPRESSO_CLUSTERING_INSTANCE_NAME=order-management-primary
+      - EIPRESSO_CLUSTERING_PORT=5705
+    ports:
+      - "8083:8083"
+      - "5705:5705"
+    depends_on:
+      - postgres-master
+      - consul-1
+      - config-server
+    networks:
+      eip-resso-cluster:
+        ipv4_address: 172.20.2.31
+
+  order-management-backup:
+    build:
+      context: ./order-management-service
+      dockerfile: Dockerfile
+    container_name: eip-resso-order-backup
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev,order-management-service
+      - SERVER_PORT=8083
+      - SPRING_CONFIG_IMPORT=optional:configserver:http://config-server:8888
+      - EIPRESSO_CLUSTERING_INSTANCE_NAME=order-management-backup
+      - EIPRESSO_CLUSTERING_PORT=5705
+    ports:
+      - "8185:8083"
+      - "5715:5705"
+    depends_on:
+      - postgres-master
+      - consul-1
+      - config-server
+      - order-management-primary
+    networks:
+      eip-resso-cluster:
+        ipv4_address: 172.20.2.32
+
+  # Config Server (should be highly available)
+  config-server:
+    build:
+      context: ./config-server
+      dockerfile: Dockerfile
+    container_name: eip-resso-config-server
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - SERVER_PORT=8888
+    ports:
+      - "8888:8888"
+    networks:
+      eip-resso-cluster:
+        ipv4_address: 172.20.2.100
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8888/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3 

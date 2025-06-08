@@ -6,16 +6,17 @@
   <packaging>pom</packaging>
   <name>EIP-resso: Coffee Shop Microservices</name>
   <description>Advanced Apache Camel microservices implementation with Enterprise Integration Patterns</description>
-  <modules>
-    <module>config-server</module>
-    <module>user-service</module>
-    <module>product-catalog-service</module>
-    <module>order-management-service</module>
-    <module>notification-service</module>
-    <module>analytics-service</module>
-    <module>payment-service</module>
-    <module>order-orchestration-service</module>
-  </modules>
+      <modules>
+        <module>config-server</module>
+        <module>eip-resso-clustering</module>
+        <module>user-service</module>
+        <module>product-catalog-service</module>
+        <module>order-management-service</module>
+        <module>notification-service</module>
+        <module>analytics-service</module>
+        <module>payment-service</module>
+        <module>order-orchestration-service</module>
+    </modules>
   <properties>
     <maven.compiler.source>17</maven.compiler.source>
     <maven.compiler.target>17</maven.compiler.target>
