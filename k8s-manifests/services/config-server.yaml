@@ -1,0 +1,190 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: config-server
+  namespace: eip-resso
+  labels:
+    app: config-server
+    tier: infrastructure
+    version: v1
+    app.kubernetes.io/name: config-server
+    app.kubernetes.io/instance: production
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/component: configuration
+    app.kubernetes.io/part-of: eip-resso-ecosystem
+    app.kubernetes.io/managed-by: kubernetes
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: config-server
+  template:
+    metadata:
+      labels:
+        app: config-server
+        tier: infrastructure
+        version: v1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8888"
+        prometheus.io/path: "/actuator/prometheus"
+    spec:
+      serviceAccountName: eip-resso-service-account
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: config-server
+        image: eip-resso/config-server:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8888
+          name: http
+          protocol: TCP
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: "kubernetes,production"
+        - name: SPRING_CLOUD_CONFIG_SERVER_GIT_URI
+          valueFrom:
+            secretKeyRef:
+              name: config-server-secrets
+              key: git-uri
+        - name: SPRING_CLOUD_CONFIG_SERVER_GIT_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: config-server-secrets
+              key: git-username
+        - name: SPRING_CLOUD_CONFIG_SERVER_GIT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: config-server-secrets
+              key: git-password
+        - name: SPRING_CLOUD_CONFIG_SERVER_GIT_DEFAULT_LABEL
+          value: "main"
+        - name: EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE
+          value: "http://consul:8500/eureka"
+        - name: MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE
+          value: "health,info,metrics,prometheus,refresh,configprops"
+        - name: MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS
+          value: "always"
+        - name: JAVA_OPTS
+          value: "-Xms512m -Xmx1024m -XX:+UseContainerSupport -XX:MaxRAMPercentage=75"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "200m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1000
+        livenessProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 8888
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /actuator/health/readiness
+            port: 8888
+          initialDelaySeconds: 30
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: config-cache
+          mountPath: /config-cache
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: config-cache
+        emptyDir:
+          sizeLimit: 1Gi
+      nodeSelector:
+        kubernetes.io/os: linux
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - config-server
+              topologyKey: kubernetes.io/hostname
+      tolerations:
+      - key: "infrastructure"
+        operator: "Equal"
+        value: "true"
+        effect: "NoSchedule"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: config-server
+  namespace: eip-resso
+  labels:
+    app: config-server
+    tier: infrastructure
+    app.kubernetes.io/name: config-server
+    app.kubernetes.io/component: configuration
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8888"
+    prometheus.io/path: "/actuator/prometheus"
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8888
+    targetPort: 8888
+    protocol: TCP
+    name: http
+  selector:
+    app: config-server
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: config-server-secrets
+  namespace: eip-resso
+  labels:
+    app: config-server
+    app.kubernetes.io/name: config-server
+    app.kubernetes.io/component: configuration
+type: Opaque
+stringData:
+  git-uri: "https://github.com/seshuthota/EIP-resso.git"
+  git-username: "your-github-username"
+  git-password: "your-github-token"
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: config-server-pdb
+  namespace: eip-resso
+  labels:
+    app: config-server
+    app.kubernetes.io/name: config-server
+    app.kubernetes.io/component: configuration
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: config-server 

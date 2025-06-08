@@ -1,0 +1,81 @@
+apiVersion: v2
+name: eip-resso
+description: Enterprise Integration Patterns - Coffee Shop Microservices Ecosystem
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+home: https://github.com/seshuthota/EIP-resso
+sources:
+  - https://github.com/seshuthota/EIP-resso
+maintainers:
+  - name: EIP-resso Engineering Team
+    email: engineering@eip-resso.com
+    url: https://eip-resso.com
+keywords:
+  - microservices
+  - spring-boot
+  - spring-cloud
+  - enterprise-integration-patterns
+  - coffee-shop
+  - kubernetes
+  - cloud-native
+  - security
+  - monitoring
+  - clustering
+annotations:
+  category: Microservices
+  licenses: MIT
+  images: |
+    - name: config-server
+      image: eip-resso/config-server:latest
+    - name: order-service
+      image: eip-resso/order-service:latest
+    - name: inventory-service
+      image: eip-resso/inventory-service:latest
+    - name: payment-service
+      image: eip-resso/payment-service:latest
+    - name: notification-service
+      image: eip-resso/notification-service:latest
+    - name: customer-service
+      image: eip-resso/customer-service:latest
+    - name: loyalty-service
+      image: eip-resso/loyalty-service:latest
+    - name: analytics-service
+      image: eip-resso/analytics-service:latest
+    - name: user-service
+      image: eip-resso/user-service:latest
+    - name: api-gateway
+      image: eip-resso/api-gateway:latest
+dependencies:
+  - name: postgresql
+    version: "12.x.x"
+    repository: https://charts.bitnami.com/bitnami
+    condition: postgresql.enabled
+  - name: redis
+    version: "17.x.x"
+    repository: https://charts.bitnami.com/bitnami
+    condition: redis.enabled
+  - name: rabbitmq
+    version: "11.x.x"
+    repository: https://charts.bitnami.com/bitnami
+    condition: rabbitmq.enabled
+  - name: elasticsearch
+    version: "19.x.x"
+    repository: https://helm.elastic.co
+    condition: elasticsearch.enabled
+  - name: prometheus
+    version: "23.x.x"
+    repository: https://prometheus-community.github.io/helm-charts
+    condition: monitoring.prometheus.enabled
+  - name: grafana
+    version: "6.x.x"
+    repository: https://grafana.github.io/helm-charts
+    condition: monitoring.grafana.enabled
+  - name: nginx-ingress
+    version: "4.x.x"
+    repository: https://kubernetes.github.io/ingress-nginx
+    condition: ingress.enabled
+  - name: cert-manager
+    version: "v1.x.x"
+    repository: https://charts.jetstack.io
+    condition: ingress.ssl.enabled 

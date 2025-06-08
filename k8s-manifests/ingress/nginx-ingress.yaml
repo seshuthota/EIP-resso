@@ -1,0 +1,201 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: eip-resso-ingress
+  namespace: eip-resso
+  labels:
+    app.kubernetes.io/name: eip-resso-ingress
+    app.kubernetes.io/component: ingress
+    app.kubernetes.io/part-of: eip-resso-ecosystem
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "30"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    nginx.ingress.kubernetes.io/limit-connections: "20"
+    nginx.ingress.kubernetes.io/limit-rpm: "100"
+    nginx.ingress.kubernetes.io/server-snippet: |
+      add_header X-Frame-Options "SAMEORIGIN" always;
+      add_header X-Content-Type-Options "nosniff" always;
+      add_header X-XSS-Protection "1; mode=block" always;
+      add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+      add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https:; media-src 'self'; object-src 'none'; child-src 'none'; frame-ancestors 'self'; form-action 'self'; base-uri 'self';" always;
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+      add_header Permissions-Policy "geolocation=(), microphone=(), camera=(), fullscreen=(self), payment=()" always;
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "Server: EIP-resso";
+      more_set_headers "X-Powered-By: ";
+spec:
+  tls:
+  - hosts:
+    - api.eip-resso.com
+    - eip-resso.com
+    - www.eip-resso.com
+    secretName: eip-resso-tls
+  rules:
+  - host: api.eip-resso.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: api-gateway
+            port:
+              number: 8080
+  - host: eip-resso.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: api-gateway
+            port:
+              number: 8080
+  - host: www.eip-resso.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: api-gateway
+            port:
+              number: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: eip-resso-monitoring-ingress
+  namespace: eip-resso
+  labels:
+    app.kubernetes.io/name: eip-resso-monitoring-ingress
+    app.kubernetes.io/component: monitoring-ingress
+    app.kubernetes.io/part-of: eip-resso-ecosystem
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/auth-type: basic
+    nginx.ingress.kubernetes.io/auth-secret: monitoring-auth
+    nginx.ingress.kubernetes.io/auth-realm: "EIP-resso Monitoring Access"
+    nginx.ingress.kubernetes.io/server-snippet: |
+      add_header X-Frame-Options "SAMEORIGIN" always;
+      add_header X-Content-Type-Options "nosniff" always;
+      add_header X-XSS-Protection "1; mode=block" always;
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+spec:
+  tls:
+  - hosts:
+    - grafana.eip-resso.com
+    - prometheus.eip-resso.com
+    - hazelcast.eip-resso.com
+    secretName: eip-resso-monitoring-tls
+  rules:
+  - host: grafana.eip-resso.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: grafana
+            port:
+              number: 3000
+  - host: prometheus.eip-resso.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: prometheus
+            port:
+              number: 9090
+  - host: hazelcast.eip-resso.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: hazelcast-management-center
+            port:
+              number: 8080
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: monitoring-auth
+  namespace: eip-resso
+  labels:
+    app.kubernetes.io/name: monitoring-auth
+    app.kubernetes.io/component: authentication
+type: Opaque
+data:
+  auth: YWRtaW46JGFwcjEkSDY1dnguVzgkNC9jdG5HWm14eC5vLlVHYndvYVNjLg==  # admin:admin (change this!)
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+  labels:
+    app.kubernetes.io/name: letsencrypt-prod
+    app.kubernetes.io/component: certificate-issuer
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: admin@eip-resso.com
+    privateKeySecretRef:
+      name: letsencrypt-prod
+    solvers:
+    - http01:
+        ingress:
+          class: nginx
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: eip-resso-tls-cert
+  namespace: eip-resso
+  labels:
+    app.kubernetes.io/name: eip-resso-tls-cert
+    app.kubernetes.io/component: certificate
+spec:
+  secretName: eip-resso-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  commonName: eip-resso.com
+  dnsNames:
+  - eip-resso.com
+  - www.eip-resso.com
+  - api.eip-resso.com
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: eip-resso-monitoring-tls-cert
+  namespace: eip-resso
+  labels:
+    app.kubernetes.io/name: eip-resso-monitoring-tls-cert
+    app.kubernetes.io/component: certificate
+spec:
+  secretName: eip-resso-monitoring-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  commonName: grafana.eip-resso.com
+  dnsNames:
+  - grafana.eip-resso.com
+  - prometheus.eip-resso.com
+  - hazelcast.eip-resso.com 

@@ -1,0 +1,225 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: eip-resso-default-deny
+  namespace: eip-resso
+  labels:
+    app.kubernetes.io/name: eip-resso
+    app.kubernetes.io/component: network-policy
+    security.policy: deny-all
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-gateway-ingress
+  namespace: eip-resso
+  labels:
+    app.kubernetes.io/name: api-gateway
+    app.kubernetes.io/component: network-policy
+    security.policy: ingress-allowed
+spec:
+  podSelector:
+    matchLabels:
+      app: api-gateway
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from: []  # Allow from anywhere (internet traffic)
+    ports:
+    - protocol: TCP
+      port: 8080
+    - protocol: TCP
+      port: 8090  # Secure gateway port
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          tier: microservices
+    ports:
+    - protocol: TCP
+      port: 8080
+    - protocol: TCP
+      port: 8081
+    - protocol: TCP
+      port: 8082
+    - protocol: TCP
+      port: 8083
+    - protocol: TCP
+      port: 8084
+    - protocol: TCP
+      port: 8085
+    - protocol: TCP
+      port: 8086
+    - protocol: TCP
+      port: 8087
+    - protocol: TCP
+      port: 8089
+  - to: []  # Allow DNS resolution
+    ports:
+    - protocol: UDP
+      port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: microservices-internal
+  namespace: eip-resso
+  labels:
+    app.kubernetes.io/name: microservices
+    app.kubernetes.io/component: network-policy
+    security.policy: internal-communication
+spec:
+  podSelector:
+    matchLabels:
+      tier: microservices
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: api-gateway
+  - from:
+    - podSelector:
+        matchLabels:
+          tier: microservices
+    ports:
+    - protocol: TCP
+      port: 8080
+    - protocol: TCP
+      port: 8081
+    - protocol: TCP
+      port: 8082
+    - protocol: TCP
+      port: 8083
+    - protocol: TCP
+      port: 8084
+    - protocol: TCP
+      port: 8085
+    - protocol: TCP
+      port: 8086
+    - protocol: TCP
+      port: 8087
+    - protocol: TCP
+      port: 8089
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          tier: infrastructure
+    ports:
+    - protocol: TCP
+      port: 5432  # PostgreSQL
+    - protocol: TCP
+      port: 6379  # Redis
+    - protocol: TCP
+      port: 5672  # RabbitMQ
+    - protocol: TCP
+      port: 8500  # Consul
+    - protocol: TCP
+      port: 9200  # Elasticsearch
+    - protocol: TCP
+      port: 5701  # Hazelcast
+    - protocol: TCP
+      port: 5702
+    - protocol: TCP
+      port: 5703
+    - protocol: TCP
+      port: 8888  # Config Server
+  - to:
+    - podSelector:
+        matchLabels:
+          tier: microservices
+  - to: []  # Allow DNS and external API calls
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 443
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: infrastructure-access
+  namespace: eip-resso
+  labels:
+    app.kubernetes.io/name: infrastructure
+    app.kubernetes.io/component: network-policy
+    security.policy: infrastructure-restricted
+spec:
+  podSelector:
+    matchLabels:
+      tier: infrastructure
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          tier: microservices
+  - from:
+    - podSelector:
+        matchLabels:
+          tier: monitoring
+  - from:
+    - podSelector:
+        matchLabels:
+          tier: infrastructure
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          tier: infrastructure
+  - to: []  # Allow DNS and external connectivity for clustering
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 443
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: monitoring-access
+  namespace: eip-resso
+  labels:
+    app.kubernetes.io/name: monitoring
+    app.kubernetes.io/component: network-policy
+    security.policy: monitoring-restricted
+spec:
+  podSelector:
+    matchLabels:
+      tier: monitoring
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from: []  # Allow external access to monitoring dashboards
+    ports:
+    - protocol: TCP
+      port: 9090  # Prometheus
+    - protocol: TCP
+      port: 3000  # Grafana
+    - protocol: TCP
+      port: 8080  # Hazelcast Management Center
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          tier: microservices
+  - to:
+    - podSelector:
+        matchLabels:
+          tier: infrastructure
+  - to: []  # Allow DNS
+    ports:
+    - protocol: UDP
+      port: 53 

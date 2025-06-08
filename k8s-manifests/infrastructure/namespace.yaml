@@ -1,0 +1,85 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: eip-resso
+  labels:
+    name: eip-resso
+    version: "1.0"
+    environment: production
+    project: eip-resso-microservices
+    security.policy: enabled
+    monitoring: enabled
+    app.kubernetes.io/name: eip-resso
+    app.kubernetes.io/instance: production
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/component: namespace
+    app.kubernetes.io/part-of: eip-resso-ecosystem
+    app.kubernetes.io/managed-by: kubernetes
+  annotations:
+    description: "EIP-resso Coffee Shop Microservices Ecosystem"
+    owner: "EIP-resso Engineering Team"
+    contact: "engineering@eip-resso.com"
+    security.policy: "enterprise-grade"
+    networking.policy: "restricted"
+    monitoring.enabled: "true"
+    backup.enabled: "true"
+    disaster-recovery: "multi-zone"
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: eip-resso-quota
+  namespace: eip-resso
+  labels:
+    app.kubernetes.io/name: eip-resso
+    app.kubernetes.io/component: resource-quota
+spec:
+  hard:
+    requests.cpu: "20"
+    requests.memory: 40Gi
+    limits.cpu: "40"
+    limits.memory: 80Gi
+    pods: "50"
+    services: "20"
+    secrets: "30"
+    configmaps: "30"
+    persistentvolumeclaims: "20"
+    services.loadbalancers: "5"
+    services.nodeports: "10"
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: eip-resso-limits
+  namespace: eip-resso
+  labels:
+    app.kubernetes.io/name: eip-resso
+    app.kubernetes.io/component: limit-range
+spec:
+  limits:
+  - default:
+      cpu: "1"
+      memory: "2Gi"
+    defaultRequest:
+      cpu: "100m"
+      memory: "256Mi"
+    max:
+      cpu: "4"
+      memory: "8Gi"
+    min:
+      cpu: "50m"
+      memory: "128Mi"
+    type: Container
+  - default:
+      cpu: "2"
+      memory: "4Gi"
+    defaultRequest:
+      cpu: "200m"
+      memory: "512Mi"
+    max:
+      cpu: "8"
+      memory: "16Gi"
+    min:
+      cpu: "100m"
+      memory: "256Mi"
+    type: Pod 
